@@ -1,41 +1,32 @@
 // fileserver.c
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-
+#include "platform.h"
 #include "protocol.h"
 
-#include "common.c"
-#include "console_utils.c"
-#include "socket_wsa.c"
 #include "client.c"
-#include "timer.c"
-
-#define MILLISECONDS_TO_MICROSECONDS 1000
 
 #define MAX_CLIENT_COUNT 1024
 
+int platform_quit = 0;
+
 void
-print_server_info(HANDLE console, int print_frequency, wchar_t* listen_address, client_storage* client_storage, timer* timer)
+print_server_info(int print_frequency, char* listen_address, client_storage* client_storage, timer* timer)
 {
     if(timer->frame_counter == 0 || timer->frame_counter % print_frequency == 0)
     {
-        clear_console(console);
+	    console_clear();
 
-        printf("%-20S: %S\n", L"Listen address", listen_address);
+        printf("%-20s: %s\n", "Listen address", listen_address);
 
         float average = (float)1 / print_frequency;
-        printf("%-20S: %.02fms %.02ffps %.02fmcy\n", L"Performance", 
+        printf("%-20s: %.02fms %.02ffps %.02fmcy\n", "Performance", 
                timer->delta_milliseconds * average, 
                timer->frames_per_second * average, 
                timer->megacycles_per_frame * average);
     
         timer_reset_accumulators(timer);
 
-        printf("%-20S: %d / %d\n", L"Connected clients", client_storage->count, client_storage->capacity);
+        printf("%-20s: %d / %d\n", "Connected clients", client_storage->count, client_storage->capacity);
     }
 }
 
@@ -83,54 +74,37 @@ main(int argc, char* argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    console_utils_init();
+    console_init();
 
     timer timer;
     timer_initialize(&timer);
 
-    WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
-    CHECK_WSA_ERROR();
+    socket_initialize();
 
-    SOCKET server_socket = socket_create_tcp();
+    socket_handle server_socket = socket_create_tcp();
 
-    struct sockaddr_in server_address;
-    memset(&server_address, 0, sizeof(struct sockaddr_in));
-    server_address.sin_family      = AF_INET;
-    server_address.sin_port        = htons(DEFAULT_LISTEN_PORT);
-    server_address.sin_addr.s_addr = 0;
+    socket_address server_address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
 
-    bind(server_socket, (struct sockaddr*)&server_address, sizeof(struct sockaddr_in));
-    CHECK_WSA_ERROR();
+    socket_bind(server_socket, server_address);
 
-    wchar_t server_address_string[INET_STRADDR_LENGTH];
+    char server_address_string[INET_STRADDR_LENGTH];
     socket_address_to_string(&server_address, server_address_string, INET_STRADDR_LENGTH);
 
-    listen(server_socket, SOMAXCONN);
-    CHECK_WSA_ERROR();
+    socket_listen(server_socket);
 
-    FD_SET read_set;
-    FD_SET write_set;
-
-    struct timeval select_timeout;
-    select_timeout.tv_sec = 0;
-    select_timeout.tv_usec = 10 * MILLISECONDS_TO_MICROSECONDS;
+    selectable_set selectable = selectable_set_create();
 
     client_storage client_storage = create_client_storage(MAX_CLIENT_COUNT);
-
-    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
 
     char* receive_data_buffer = malloc(MAX_PACKET_SIZE);
 
     int running = 1;
-    while(running && !console_indicate_quit)
+    while(running && !platform_quit)
     {
-        print_server_info(console, 10, server_address_string, &client_storage, &timer);
+        print_server_info(100, server_address_string, &client_storage, &timer);
 
-        FD_ZERO(&read_set);
-        FD_SET(server_socket, &read_set);
-
-        FD_ZERO(&write_set);
+        selectable_set_clear(&selectable);
+        selectable_set_set_read(&selectable, server_socket);
 
         int client_index;
         for(client_index = 0; client_index < client_storage.count; ++client_index)
@@ -148,16 +122,14 @@ main(int argc, char* argv[])
                 continue;
             }
 
-            FD_SET(client->socket, &read_set);
+            selectable_set_set_read(&selectable, client->socket);
         }
 
-        int selected = select(0, &read_set, &write_set, 0, &select_timeout);
-        if(selected > 0 && FD_ISSET(server_socket, &read_set))
+        int selected = selectable_set_select(&selectable, 10);
+        if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
         {
-            struct sockaddr_in accepted_address;
-            int accepted_address_length = sizeof(struct sockaddr_in);
-
-            SOCKET accepted = accept(server_socket, (struct sockaddr*)&accepted_address, &accepted_address_length);
+            socket_address accepted_address;
+            socket_handle accepted = socket_accept(server_socket, &accepted_address);
 
             client* new_client  = create_new_client(&client_storage);
             if(new_client != 0)
@@ -169,31 +141,27 @@ main(int argc, char* argv[])
             
                 socket_address_to_string(&accepted_address, new_client->address_string, INET_STRADDR_LENGTH);
 
-                printf("Client connected: %S\n", new_client->address_string);
+                printf("Client connected: %s\n", new_client->address_string);
             }
             else
             {
                 printf("Can't connect Client. Too many connections.\n");
-                closesocket(accepted);
+                socket_close(accepted);
             }
         }
 
         for(client_index = 0; client_index < client_storage.count; ++client_index)
         {
             client* client = (client_storage.clients + client_index);
-            if(FD_ISSET(client->socket, &write_set))
+            if(selectable_set_can_write(&selectable, client->socket))
             {
                 int sent_bytes = 0;
                 while(sent_bytes < client->send_bytes)
                 {
                     int remaining = client->send_bytes - sent_bytes;
-                    int send_result = send(client->socket, client->send_data + sent_bytes, remaining, 0);
-                    if(send_result == SOCKET_ERROR)
-                    {
-                        // TODO: More robust error handling for sending data.
-                        CHECK_WSA_ERROR();
-                    }
-                    else if(send_result > 0)
+                    int send_result =
+	                    socket_send(client->socket, client->send_data + sent_bytes, remaining);
+                    if(send_result > 0)
                     {
                         sent_bytes += send_result;
                     }
@@ -207,16 +175,10 @@ main(int argc, char* argv[])
                 client->send_bytes = 0;
             }
 
-            if(FD_ISSET(client->socket, &read_set))
+            if(selectable_set_can_read(&selectable, client->socket))
             {
-                int recv_result = recv(client->socket, receive_data_buffer, MAX_PACKET_SIZE, 0);
-                if(recv_result == SOCKET_ERROR)
-                {
-                    // TODO: More robust error handling for client data. Currently clients could
-                    // send malformed data packets to make the server shut down.
-                    CHECK_WSA_ERROR();
-                }
-                else if(recv_result > 0)
+                int recv_result = socket_recv(client->socket, receive_data_buffer, MAX_PACKET_SIZE);
+                if(recv_result > 0)
                 {
                     client_receive_packet(client, receive_data_buffer, recv_result);
                 }
@@ -234,9 +196,9 @@ main(int argc, char* argv[])
 
     destroy_client_storage(&client_storage);
 
-    closesocket(server_socket);
+    socket_close(server_socket);
 
-    WSACleanup();
+    socket_shutdown();
 
     printf("Server terminated gracefully.\n");
 }

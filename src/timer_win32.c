@@ -3,17 +3,18 @@
 #include <intrin.h> 
 #include <stdint.h>
 
-typedef struct timer {
-    int64_t       performance_frequency;
-    LARGE_INTEGER performance_counter;
-    uint64_t      rdtsc_cycles;
-    uint64_t      frame_cycles;
-    int64_t       elapsed_counter;
-    double        delta_milliseconds;
-    double        frames_per_second;
-    double        megacycles_per_frame;
-    uint64_t      frame_counter;
-} timer;
+double
+time_get_seconds()
+{
+	FILETIME file_time;
+    GetSystemTimeAsFileTime(&file_time);
+
+    LONGLONG time_nano100 = (LONGLONG)file_time.dwLowDateTime + 
+        ((LONGLONG)(file_time.dwHighDateTime) << 32LL);
+    double seconds = (double)time_nano100 / 10000000.0;
+    
+    return seconds;
+}
 
 void
 timer_initialize(timer* timer)
@@ -24,7 +25,7 @@ timer_initialize(timer* timer)
 
     LARGE_INTEGER performance_counter;
     QueryPerformanceCounter(&performance_counter);
-    timer->performance_counter = performance_counter;
+    timer->performance_counter = performance_counter.QuadPart;
 
     timer->rdtsc_cycles = __rdtsc();
 
@@ -56,7 +57,7 @@ timer_end_frame(timer* timer)
     timer->rdtsc_cycles = rdtsc_cycles;
 
     timer->elapsed_counter = performance_counter.QuadPart - timer->performance_counter.QuadPart;
-    timer->performance_counter = performance_counter;
+    timer->performance_counter = performance_counter.QuadPart;
 
     timer->delta_milliseconds += (((1000.0 * (double)timer->elapsed_counter) / (double)timer->performance_frequency));
     timer->frames_per_second += (double)timer->performance_frequency / (double)timer->elapsed_counter;

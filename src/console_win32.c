@@ -1,9 +1,9 @@
-// console_utils.c
+// console_win32.c
 
-static int console_indicate_quit = 0;
+static HANDLE global_console_handle = 0;
 
 BOOL WINAPI 
-console_handler(DWORD signal) 
+console_ctrl_handler(DWORD signal) 
 {
     switch(signal)
     {
@@ -12,7 +12,7 @@ console_handler(DWORD signal)
     case CTRL_CLOSE_EVENT:
     case CTRL_LOGOFF_EVENT:
     case CTRL_SHUTDOWN_EVENT:
-        console_indicate_quit = 1;
+	    platform_quit = 1;
         break;
     }
 
@@ -20,14 +20,17 @@ console_handler(DWORD signal)
 }
 
 void
-console_utils_init()
+console_init()
 {
-    SetConsoleCtrlHandler(console_handler, TRUE);
+	global_console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
 }
 
 void
-clear_console(HANDLE console)
+console_clear()
 {
+	HANDLE console = global_console_handle;
+	
     COORD cursor_position = { 0, 0 };
     DWORD characters_written = 0;
     CONSOLE_SCREEN_BUFFER_INFO console_info; 

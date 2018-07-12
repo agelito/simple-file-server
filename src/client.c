@@ -1,9 +1,9 @@
 // client.c
 
 typedef struct client {
-    SOCKET             socket;
-    struct sockaddr_in address;
-    wchar_t            address_string[INET_STRADDR_LENGTH];
+    socket_handle      socket;
+    socket_address     address;
+	char               address_string[INET_STRADDR_LENGTH];
     int                pending_disconnect;
     int                send_bytes;
     char*              send_data;
@@ -46,7 +46,7 @@ destroy_client_storage(client_storage* client_storage)
     {
         client* client = (client_storage->clients + i);
         if(client->socket)
-            closesocket(client->socket);
+            socket_close(client->socket);
     }
 
     client_storage->count = 0;
@@ -74,8 +74,8 @@ client_disconnect(client* client)
 {
     if(client->socket)
     {
-        printf("Disconnect client: %S\n", client->address_string);
-        closesocket(client->socket);
+        printf("Disconnect client: %s\n", client->address_string);
+        socket_close(client->socket);
         client->socket = 0;
     }
 }
@@ -86,7 +86,7 @@ remove_client_index(client_storage* client_storage, int index)
     client* client = (client_storage->clients + index);
     if(client->socket)
     {
-        closesocket(client->socket);
+        socket_close(client->socket);
         client->socket = 0;
     }
 
