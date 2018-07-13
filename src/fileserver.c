@@ -19,14 +19,15 @@ print_server_info(int print_frequency, char* listen_address, client_storage* cli
         printf("%-20s: %s\n", "Listen address", listen_address);
 
         float average = (float)1 / print_frequency;
-        printf("%-20s: %.02fms %.02ffps %.02fmcy\n", "Performance", 
+        printf("%-20s: %.02fms %.02fups %.02fmcy\n", "Performance", 
                timer->delta_milliseconds * average, 
                timer->frames_per_second * average, 
                timer->megacycles_per_frame * average);
     
         timer_reset_accumulators(timer);
 
-        printf("%-20s: %d / %d\n", "Connected clients", client_storage->count, client_storage->capacity);
+        printf("%-20s: %d / %d\n", "Connected clients", client_storage->count,
+               client_storage->capacity);
     }
 }
 
@@ -62,10 +63,113 @@ client_receive_packet(client* client, char* data, int length)
         }
 
         char* packet_data_body = (char*)header + sizeof(packet_header);
-        client_receive_packet_body(client, header->packet_type, packet_data_body, header->packet_size - sizeof(packet_header));
+        client_receive_packet_body(client, header->packet_type, packet_data_body,
+                                   header->packet_size - sizeof(packet_header));
 
         data = (data + header->packet_size);
     }
+}
+
+void
+accept_incoming_connections(int count, socket_handle socket, client_storage* client_storage)
+{
+	printf("count: %d\n", count);
+	
+	while(0 < count--)
+	{
+		socket_address accepted_address;
+		socket_handle accepted = socket_accept(socket, &accepted_address);
+		if(accepted == 0) break;
+
+		client* new_client  = create_new_client(client_storage);
+		if(new_client != 0)
+		{
+			socket_set_nonblocking(accepted);
+
+			new_client->socket  = accepted;
+			new_client->address = accepted_address;
+            
+			socket_address_to_string(&accepted_address, new_client->address_string,
+			                         INET_STRADDR_LENGTH);
+
+			printf("Client connected: %s\n", new_client->address_string);
+
+			panic(2);
+		}
+		else
+		{
+			printf("Can't connect Client. Too many connections.\n");
+			socket_close(accepted);
+		}
+	}
+}
+
+void
+process_client_connections(client_storage* client_storage, selectable_set* selectable)
+{
+	int client_index;
+	for(client_index = 0; client_index < client_storage->count; ++client_index)
+	{
+		client* client = (client_storage->clients + client_index);
+
+		if(client->pending_disconnect && client->send_bytes == 0)
+		{
+			client_disconnect(client);
+		}
+            
+		if(!client->socket)
+		{
+			remove_client_index(client_storage, client_index--);
+			continue;
+		}
+
+		selectable_set_set_read(selectable, client->socket);
+	}
+}
+
+void
+process_client_network_io(client_storage* client_storage, selectable_set* selectable,
+                          char* io_buffer, int io_buffer_size)
+{
+	int client_index;
+	for(client_index = 0; client_index < client_storage->count; ++client_index)
+	{
+		client* client = (client_storage->clients + client_index);
+		if(selectable_set_can_write(selectable, client->socket))
+		{
+			int sent_bytes = 0;
+			while(sent_bytes < client->send_bytes)
+			{
+				int remaining = client->send_bytes - sent_bytes;
+				int send_result =
+					socket_send(client->socket, client->send_data + sent_bytes, remaining);
+				if(send_result > 0)
+				{
+					sent_bytes += send_result;
+				}
+				else
+				{
+					client_disconnect(client);
+					break;
+				}
+			}
+
+			client->send_bytes = 0;
+		}
+
+		if(selectable_set_can_read(selectable, client->socket))
+		{
+			int recv_result = socket_recv(client->socket, io_buffer, io_buffer_size);
+			if(recv_result > 0)
+			{
+				client_receive_packet(client, io_buffer, recv_result);
+			}
+			else
+			{
+				client_disconnect(client);
+			}
+		}
+	}
 }
 
 int 
@@ -101,95 +205,22 @@ main(int argc, char* argv[])
     int running = 1;
     while(running && !platform_quit)
     {
-        print_server_info(100, server_address_string, &client_storage, &timer);
+	    print_server_info(100, server_address_string, &client_storage, &timer);
+	    
+	    selectable_set_clear(&selectable);
+	    selectable_set_set_read(&selectable, server_socket);
 
-        selectable_set_clear(&selectable);
-        selectable_set_set_read(&selectable, server_socket);
+	    process_client_connections(&client_storage, &selectable);
 
-        int client_index;
-        for(client_index = 0; client_index < client_storage.count; ++client_index)
-        {
-            client* client = (client_storage.clients + client_index);
+	    int selected = selectable_set_select(&selectable, 10);
+	    if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
+	    {
+		    accept_incoming_connections(selected, server_socket, &client_storage);
+	    }
 
-            if(client->pending_disconnect && client->send_bytes == 0)
-            {
-                client_disconnect(client);
-            }
-            
-            if(!client->socket)
-            {
-                remove_client_index(&client_storage, client_index--);
-                continue;
-            }
+	    process_client_network_io(&client_storage, &selectable, receive_data_buffer, MAX_PACKET_SIZE);
 
-            selectable_set_set_read(&selectable, client->socket);
-        }
-
-        int selected = selectable_set_select(&selectable, 10);
-        if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
-        {
-            socket_address accepted_address;
-            socket_handle accepted = socket_accept(server_socket, &accepted_address);
-
-            client* new_client  = create_new_client(&client_storage);
-            if(new_client != 0)
-            {
-                socket_set_nonblocking(accepted);
-
-                new_client->socket  = accepted;
-                new_client->address = accepted_address;
-            
-                socket_address_to_string(&accepted_address, new_client->address_string, INET_STRADDR_LENGTH);
-
-                printf("Client connected: %s\n", new_client->address_string);
-            }
-            else
-            {
-                printf("Can't connect Client. Too many connections.\n");
-                socket_close(accepted);
-            }
-        }
-
-        for(client_index = 0; client_index < client_storage.count; ++client_index)
-        {
-            client* client = (client_storage.clients + client_index);
-            if(selectable_set_can_write(&selectable, client->socket))
-            {
-                int sent_bytes = 0;
-                while(sent_bytes < client->send_bytes)
-                {
-                    int remaining = client->send_bytes - sent_bytes;
-                    int send_result =
-	                    socket_send(client->socket, client->send_data + sent_bytes, remaining);
-                    if(send_result > 0)
-                    {
-                        sent_bytes += send_result;
-                    }
-                    else
-                    {
-                        client_disconnect(client);
-                        break;
-                    }
-                }
-
-                client->send_bytes = 0;
-            }
-
-            if(selectable_set_can_read(&selectable, client->socket))
-            {
-                int recv_result = socket_recv(client->socket, receive_data_buffer, MAX_PACKET_SIZE);
-                if(recv_result > 0)
-                {
-                    client_receive_packet(client, receive_data_buffer, recv_result);
-                }
-                else
-                {
-                    client_disconnect(client);
-                }
-            }
-        }
-
-        timer_end_frame(&timer);
+	    timer_end_frame(&timer);
     }
 
     free(receive_data_buffer);

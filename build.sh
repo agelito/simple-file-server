@@ -1,5 +1,9 @@
 #!/bin/sh
 
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+cd "${BASE_DIR}"
+
 COMPILE_START=$(./tools/ctime)
 
 gcc -std=c99 -o bin/server_locator -Wall -O3 -pedantic -lrt src/server_locator.c src/platform_linux.c
