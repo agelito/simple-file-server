@@ -18,6 +18,7 @@
 #define NANOSECOND 1000000000
 
 #include "platform_common.c"
+#include "selectable_linux.c"
 #include "console_linux.c"
 #include "timer_linux.c"
 #include "socket_linux.c"
@@ -28,22 +29,4 @@ thread_sleep(int milliseconds)
 	usleep(milliseconds * 1000);
 }
 
-double
-time_get_seconds()
-{
-	uint64_t nanoseconds = time_get_nanoseconds();
-	double seconds = (double)nanoseconds / NANOSECOND;
-	
-	return seconds;
-}
 
-uint64_t
-time_get_nanoseconds()
-{
-    struct timespec timespec;
-    clock_gettime(CLOCK_MONOTONIC, &timespec);
-
-    uint64_t nanoseconds = timespec.tv_sec * NANOSECOND;
-    nanoseconds += timespec.tv_nsec;
-    return nanoseconds;
-}

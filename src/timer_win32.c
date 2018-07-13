@@ -56,7 +56,7 @@ timer_end_frame(timer* timer)
     timer->frame_cycles = rdtsc_cycles - timer->rdtsc_cycles;
     timer->rdtsc_cycles = rdtsc_cycles;
 
-    timer->elapsed_counter = performance_counter.QuadPart - timer->performance_counter.QuadPart;
+    timer->elapsed_counter = performance_counter.QuadPart - timer->performance_counter;
     timer->performance_counter = performance_counter.QuadPart;
 
     timer->delta_milliseconds += (((1000.0 * (double)timer->elapsed_counter) / (double)timer->performance_frequency));
