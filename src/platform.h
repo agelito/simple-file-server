@@ -58,6 +58,7 @@ socket_handle	socket_create_udp();
 socket_handle	socket_create_tcp();
 void			socket_close(socket_handle socket);
 void			socket_set_nonblocking(socket_handle socket);
+void            socket_set_blocking(socket_handle socket);
 void			socket_enable_broadcast(socket_handle socket);
 void			socket_address_to_string(socket_address* address, char* string_buffer,
 			                             int string_buffer_length);
@@ -73,6 +74,7 @@ int             socket_recv(socket_handle socket, char* recv_buffer, int recv_le
 int             socket_sendto(socket_handle socket, char* send_buffer, int send_buffer_size,
                               socket_address* address);
 socket_handle   socket_accept(socket_handle socket, socket_address* address);
+void            socket_connect(socket_handle socket, socket_address* address);
 
 selectable_set	selectable_set_create();
 int  			selectable_set_can_read(selectable_set* set, socket_handle socket);
@@ -81,6 +83,6 @@ void			selectable_set_set_read(selectable_set* set, socket_handle socket);
 void			selectable_set_set_write(selectable_set* set, socket_handle socket);
 void			selectable_set_clear(selectable_set* set);
 void			selectable_set_destroy(selectable_set* set);
-int             selectable_set_select(selectable_set* set, int timeout_milliseconds);
+int             selectable_set_select(selectable_set* set, int highest_handle, int timeout_milliseconds);
 
 #endif // PLATFORM_H_INCLUDED

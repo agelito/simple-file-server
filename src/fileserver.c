@@ -3,14 +3,12 @@
 #include "platform.h"
 #include "protocol.h"
 
-#include "client.c"
+#include "connection.c"
 
-#define MAX_CLIENT_COUNT 1024
-
-int platform_quit = 0;
+#define MAX_CONNECTION_COUNT 1024
 
 void
-print_server_info(int print_frequency, char* listen_address, client_storage* client_storage, timer* timer)
+print_server_info(int print_frequency, char* listen_address, connection_storage* connection_storage, timer* timer)
 {
     if(timer->frame_counter == 0 || timer->frame_counter % print_frequency == 0)
     {
@@ -26,13 +24,13 @@ print_server_info(int print_frequency, char* listen_address, client_storage* cli
     
         timer_reset_accumulators(timer);
 
-        printf("%-20s: %d / %d\n", "Connected clients", client_storage->count,
-               client_storage->capacity);
+        printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
+               connection_storage->capacity);
     }
 }
 
 void 
-client_receive_packet_body(client* client, int packet_type, char* packet_body, int body_length)
+connection_receive_packet_body(connection* connection, int packet_type, char* packet_body, int body_length)
 {
     UNUSED(packet_body);
     UNUSED(body_length);
@@ -44,13 +42,13 @@ client_receive_packet_body(client* client, int packet_type, char* packet_body, i
     case PACKET_FILE_UPLOAD_CHUNK: break;
     case PACKET_FILE_UPLOAD_FINAL: break;
     default: 
-        client->pending_disconnect = 1;
+        connection->pending_disconnect = 1;
         break;
     }
 }
 
 void
-client_receive_packet(client* client, char* data, int length)
+connection_receive_packet(connection* connection, char* data, int length)
 {
     int remaining_bytes = length;
     while(remaining_bytes > 0)
@@ -58,12 +56,12 @@ client_receive_packet(client* client, char* data, int length)
         packet_header* header = (packet_header*)data;
         if(header->packet_size > remaining_bytes || header->packet_type == PACKET_INVALID_PROTOCOL)
         {
-            client->pending_disconnect = 1;
+            connection->pending_disconnect = 1;
             break;
         }
 
         char* packet_data_body = (char*)header + sizeof(packet_header);
-        client_receive_packet_body(client, header->packet_type, packet_data_body,
+        connection_receive_packet_body(connection, header->packet_type, packet_data_body,
                                    header->packet_size - sizeof(packet_header));
 
         data = (data + header->packet_size);
@@ -71,9 +69,11 @@ client_receive_packet(client* client, char* data, int length)
 }
 
 void
-accept_incoming_connections(int count, socket_handle socket, client_storage* client_storage)
+accept_incoming_connections(int count, socket_handle socket, connection_storage* connection_storage)
 {
-	printf("count: %d\n", count);
+	int max_incoming_per_frame = 32;
+	if(count > max_incoming_per_frame)
+		count = max_incoming_per_frame;
 	
 	while(0 < count--)
 	{
@@ -81,92 +81,96 @@ accept_incoming_connections(int count, socket_handle socket, client_storage* cli
 		socket_handle accepted = socket_accept(socket, &accepted_address);
 		if(accepted == 0) break;
 
-		client* new_client  = create_new_client(client_storage);
-		if(new_client != 0)
+		connection* new_connection  = create_new_connection(connection_storage);
+		if(new_connection != 0)
 		{
 			socket_set_nonblocking(accepted);
 
-			new_client->socket  = accepted;
-			new_client->address = accepted_address;
+			new_connection->socket  = accepted;
+			new_connection->address = accepted_address;
             
-			socket_address_to_string(&accepted_address, new_client->address_string,
+			socket_address_to_string(&accepted_address, new_connection->address_string,
 			                         INET_STRADDR_LENGTH);
 
-			printf("Client connected: %s\n", new_client->address_string);
-
-			panic(2);
+			printf("Connection created: %s\n", new_connection->address_string);
 		}
 		else
 		{
-			printf("Can't connect Client. Too many connections.\n");
+			printf("Can't create connection. Too many connections.\n");
 			socket_close(accepted);
 		}
 	}
 }
 
-void
-process_client_connections(client_storage* client_storage, selectable_set* selectable)
+int
+process_connection_connections(connection_storage* connection_storage, selectable_set* selectable)
 {
-	int client_index;
-	for(client_index = 0; client_index < client_storage->count; ++client_index)
+	int highest_handle = 0;
+	int connection_index;
+	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
 	{
-		client* client = (client_storage->clients + client_index);
+		connection* connection = (connection_storage->connections + connection_index);
 
-		if(client->pending_disconnect && client->send_bytes == 0)
+		if(connection->pending_disconnect && connection->send_bytes == 0)
 		{
-			client_disconnect(client);
+			connection_disconnect(connection);
 		}
             
-		if(!client->socket)
+		if(!connection->socket)
 		{
-			remove_client_index(client_storage, client_index--);
+			remove_connection_index(connection_storage, connection_index--);
 			continue;
 		}
 
-		selectable_set_set_read(selectable, client->socket);
+		selectable_set_set_read(selectable, connection->socket);
+
+		if(connection->socket > highest_handle)
+			highest_handle = connection->socket;
 	}
+
+	return highest_handle;
 }
 
 void
-process_client_network_io(client_storage* client_storage, selectable_set* selectable,
+process_connection_network_io(connection_storage* connection_storage, selectable_set* selectable,
                           char* io_buffer, int io_buffer_size)
 {
-	int client_index;
-	for(client_index = 0; client_index < client_storage->count; ++client_index)
+	int connection_index;
+	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
 	{
-		client* client = (client_storage->clients + client_index);
-		if(selectable_set_can_write(selectable, client->socket))
+		connection* connection = (connection_storage->connections + connection_index);
+		if(selectable_set_can_write(selectable, connection->socket))
 		{
 			int sent_bytes = 0;
-			while(sent_bytes < client->send_bytes)
+			while(sent_bytes < connection->send_bytes)
 			{
-				int remaining = client->send_bytes - sent_bytes;
+				int remaining = connection->send_bytes - sent_bytes;
 				int send_result =
-					socket_send(client->socket, client->send_data + sent_bytes, remaining);
+					socket_send(connection->socket, connection->send_data + sent_bytes, remaining);
 				if(send_result > 0)
 				{
 					sent_bytes += send_result;
 				}
 				else
 				{
-					client_disconnect(client);
+					connection_disconnect(connection);
 					break;
 				}
 			}
 
-			client->send_bytes = 0;
+			connection->send_bytes = 0;
 		}
 
-		if(selectable_set_can_read(selectable, client->socket))
+		if(selectable_set_can_read(selectable, connection->socket))
 		{
-			int recv_result = socket_recv(client->socket, io_buffer, io_buffer_size);
+			int recv_result = socket_recv(connection->socket, io_buffer, io_buffer_size);
 			if(recv_result > 0)
 			{
-				client_receive_packet(client, io_buffer, recv_result);
+				connection_receive_packet(connection, io_buffer, recv_result);
 			}
 			else
 			{
-				client_disconnect(client);
+				connection_disconnect(connection);
 			}
 		}
 	}
@@ -198,34 +202,38 @@ main(int argc, char* argv[])
 
     selectable_set selectable = selectable_set_create();
 
-    client_storage client_storage = create_client_storage(MAX_CLIENT_COUNT);
+    connection_storage connection_storage = create_connection_storage(MAX_CONNECTION_COUNT);
 
     char* receive_data_buffer = malloc(MAX_PACKET_SIZE);
 
     int running = 1;
     while(running && !platform_quit)
     {
-	    print_server_info(100, server_address_string, &client_storage, &timer);
+	    print_server_info(100, server_address_string, &connection_storage, &timer);
 	    
 	    selectable_set_clear(&selectable);
 	    selectable_set_set_read(&selectable, server_socket);
 
-	    process_client_connections(&client_storage, &selectable);
+	    int highest_handle = process_connection_connections(&connection_storage, &selectable);
+	    if(server_socket > highest_handle)
+		    highest_handle = server_socket;
 
-	    int selected = selectable_set_select(&selectable, 10);
+	    int selected = selectable_set_select(&selectable, highest_handle, 10);
+
+	    // NOTE: Process already connected connections before accepting new connections.
+	    process_connection_network_io(&connection_storage, &selectable, receive_data_buffer, MAX_PACKET_SIZE);
+
 	    if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
 	    {
-		    accept_incoming_connections(selected, server_socket, &client_storage);
+		    accept_incoming_connections(selected, server_socket, &connection_storage);
 	    }
-
-	    process_client_network_io(&client_storage, &selectable, receive_data_buffer, MAX_PACKET_SIZE);
 
 	    timer_end_frame(&timer);
     }
 
     free(receive_data_buffer);
 
-    destroy_client_storage(&client_storage);
+    destroy_connection_storage(&connection_storage);
 
     socket_close(server_socket);
 

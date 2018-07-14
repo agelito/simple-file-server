@@ -56,11 +56,11 @@ selectable_set_destroy(selectable_set* set)
 
 #define MILLISECONDS_TO_MICROSECONDS 1000
 
-int selectable_set_select(selectable_set* set, int timeout_milliseconds)
+int selectable_set_select(selectable_set* set, int highest_handle, int timeout_milliseconds)
 {
 	struct timeval select_timeout;
 	select_timeout.tv_sec = 0;
 	select_timeout.tv_usec = timeout_milliseconds * MILLISECONDS_TO_MICROSECONDS;
 	
-	return select(0, (fd_set*)set->read, (fd_set*)set->write, 0, &select_timeout);
+	return select(highest_handle + 1, (fd_set*)set->read, (fd_set*)set->write, 0, &select_timeout);
 }

@@ -8,8 +8,6 @@
 
 #define SEND_QUEUE_CAPACITY 128
 
-int platform_quit = 0;
-
 int 
 main(int argc, char* argv[])
 {

@@ -23,6 +23,8 @@
 #include "timer_linux.c"
 #include "socket_linux.c"
 
+int platform_quit = 0;
+
 void
 thread_sleep(int milliseconds)
 {

@@ -16,6 +16,8 @@ socket_check_error()
 	int error = errno;
 	if(error == EWOULDBLOCK || error == EAGAIN)
 		return 0;
+ 	else if(error == EINPROGRESS)
+		return 0;
 	else if(error != 0)
 	{
 		char* error_string = strerror(error);
@@ -40,7 +42,7 @@ socket_shutdown()
 socket_handle
 socket_create_udp()
 {
-	int created_socket = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+	int created_socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if(created_socket == -1) SOCKET_CHECK_ERROR();
 
 	return (socket_handle)created_socket;
@@ -49,7 +51,7 @@ socket_create_udp()
 socket_handle
 socket_create_tcp()
 {
-	int created_socket = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	int created_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if(created_socket == -1) SOCKET_CHECK_ERROR();
 
 	return (socket_handle)created_socket;
@@ -66,6 +68,13 @@ socket_set_nonblocking(socket_handle socket)
 {
 	int flags = fcntl(socket, F_GETFL, 0);
 	fcntl(socket, F_SETFD, flags | O_NONBLOCK);
+}
+
+void
+socket_set_blocking(socket_handle socket)
+{
+	int flags = fcntl(socket, F_GETFL, 0);
+	fcntl(socket, F_SETFD, flags & (~O_NONBLOCK));
 }
 
 void
@@ -173,4 +182,12 @@ socket_accept(socket_handle socket, socket_address* address)
 	socket_handle accepted = accept(socket, (struct sockaddr*)address, &address_length);
 	if(accepted == -1) SOCKET_CHECK_ERROR();
 	return accepted;
+}
+
+void
+socket_connect(socket_handle socket, socket_address* address)
+{
+	int address_length = sizeof(struct sockaddr_in);
+	int connect_result = connect(socket, (struct sockaddr*)address, address_length);
+	if(connect_result == -1) SOCKET_CHECK_ERROR();
 }
