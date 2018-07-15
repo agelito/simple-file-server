@@ -1,15 +1,28 @@
 // connection.c
 
-typedef struct connection {
-    socket_handle      socket;
-    socket_address     address;
-	char               address_string[INET_STRADDR_LENGTH];
-    int                pending_disconnect;
-    int                send_bytes;
-    char*              send_data;
+typedef struct connection_file_transfer
+{
+	char*	file_name;
+	int		file_size;
+	int		received_bytes;
+	int		chunk_count;
+	int		chunk_completed;
+} connection_file_transfer;
+
+typedef struct connection
+{
+    socket_handle				socket;
+    socket_address				address;
+	char						address_string[INET_STRADDR_LENGTH];
+    int							pending_disconnect;
+    int							send_bytes;
+    char*						send_data;
+	int							transfer_in_progress;
+	connection_file_transfer	transfer;
 } connection;
 
-typedef struct connection_storage {
+typedef struct connection_storage
+{
     int count;
     int capacity;
     connection* connections;
@@ -63,8 +76,9 @@ create_new_connection(connection_storage* connection_storage)
     if(connection_storage->count < connection_storage->capacity)
     {
         new_connection = (connection_storage->connections + connection_storage->count++);
-        new_connection->socket             = 0;
-        new_connection->pending_disconnect = 0;
+        new_connection->socket				 = 0;
+        new_connection->pending_disconnect	 = 0;
+        new_connection->transfer_in_progress = 0;
     }
     return new_connection;
 }

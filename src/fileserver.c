@@ -52,6 +52,42 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
     return last_print_time;
 }
 
+void
+connection_upload_begin(connection* connection, char* packet_body, int body_length)
+{
+	if(body_length < sizeof(packet_file_upload_begin))
+	{
+		// TODO: Send protocol error packet.
+		connection->pending_disconnect = 1;
+		return;
+	}
+	
+	if(connection->transfer_in_progress)
+	{
+		// TODO: Send protocol error packet.
+		connection->pending_disconnect = 1;
+		return;
+	}
+
+	packet_file_upload_begin* upload_begin = (packet_file_upload_begin*)packet_body;
+	
+	int packet_size_with_filename = sizeof(packet_file_upload_begin) + upload_begin->file_name_length;
+	if(body_length != packet_size_with_filename)
+	{
+		// TODO: Send protocol error packet.
+		connection->pending_disconnect = 1;
+		return;
+	}
+
+	connection->transfer_in_progress = 1;
+	connection->transfer.file_size	 = upload_begin->file_size;
+	connection->transfer.chunk_count = upload_begin->chunk_count;
+	// TODO: Sanitize and assign file name.
+
+	connection->transfer.received_bytes	 = 0;
+	connection->transfer.chunk_completed = 0;
+}
+
 void 
 connection_receive_packet_body(connection* connection, int packet_type, char* packet_body, int body_length)
 {
@@ -61,7 +97,9 @@ connection_receive_packet_body(connection* connection, int packet_type, char* pa
     switch(packet_type)
     {
     case PACKET_DISCONNECT: break;
-    case PACKET_FILE_UPLOAD_BEGIN: break;
+    case PACKET_FILE_UPLOAD_BEGIN:
+	    connection_upload_begin(connection, packet_body, body_length);
+    break;
     case PACKET_FILE_UPLOAD_CHUNK: break;
     case PACKET_FILE_UPLOAD_FINAL: break;
     default: 
