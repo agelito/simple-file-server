@@ -20,6 +20,7 @@ typedef struct timer {
     uint64_t      frame_cycles;
     int64_t       elapsed_counter;
     double        delta_milliseconds;
+	double        elapsed_seconds;
     double        frames_per_second;
     double        megacycles_per_frame;
     uint64_t      frame_counter;

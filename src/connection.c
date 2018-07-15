@@ -74,7 +74,6 @@ connection_disconnect(connection* connection)
 {
     if(connection->socket)
     {
-        printf("Disconnect connection: %s\n", connection->address_string);
         socket_close(connection->socket);
         connection->socket = 0;
     }

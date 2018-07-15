@@ -7,26 +7,49 @@
 
 #define MAX_CONNECTION_COUNT 1024
 
-void
-print_server_info(int print_frequency, char* listen_address, connection_storage* connection_storage, timer* timer)
+typedef struct connection_statistics {
+	int connections;
+	int rejected_connections;
+	int disconnections;
+} connection_statistics;
+
+float
+print_server_info(char* listen_address, connection_storage* connection_storage,
+                  timer* timer, connection_statistics* statistics, float last_print_time)
 {
-    if(timer->frame_counter == 0 || timer->frame_counter % print_frequency == 0)
+	if(last_print_time <= 0.0f || (timer->elapsed_seconds - last_print_time) > 1.0f)
     {
 	    console_clear();
 
         printf("%-20s: %s\n", "Listen address", listen_address);
 
-        float average = (float)1 / print_frequency;
-        printf("%-20s: %.02fms %.02fups %.02fmcy\n", "Performance", 
+        float average = (float)1 / timer->frame_counter;
+        printf("%-20s: %.02fms %.02fups %.02fmcy %.02fs\n", "Performance", 
                timer->delta_milliseconds * average, 
                timer->frames_per_second * average, 
-               timer->megacycles_per_frame * average);
+               timer->megacycles_per_frame * average,
+               timer->elapsed_seconds);
     
         timer_reset_accumulators(timer);
 
+        if(statistics->connections)
+	        printf("%-20s: %d\n", "Connected", statistics->connections);
+        if(statistics->disconnections)
+	        printf("%-20s: %d\n", "Disconnected", statistics->disconnections);
+        if(statistics->rejected_connections)
+	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
+
+        statistics->connections			 = 0;
+        statistics->disconnections		 = 0;
+        statistics->rejected_connections = 0;
+        
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
+
+        last_print_time = timer->elapsed_seconds;
     }
+
+    return last_print_time;
 }
 
 void 
@@ -69,7 +92,8 @@ connection_receive_packet(connection* connection, char* data, int length)
 }
 
 void
-accept_incoming_connections(int count, socket_handle socket, connection_storage* connection_storage)
+accept_incoming_connections(int count, socket_handle socket, connection_storage* connection_storage,
+                            connection_statistics* statistics)
 {
 	int max_incoming_per_frame = 32;
 	if(count > max_incoming_per_frame)
@@ -92,18 +116,19 @@ accept_incoming_connections(int count, socket_handle socket, connection_storage*
 			socket_address_to_string(&accepted_address, new_connection->address_string,
 			                         INET_STRADDR_LENGTH);
 
-			printf("Connection created: %s\n", new_connection->address_string);
+			statistics->connections += 1;
 		}
 		else
 		{
-			printf("Can't create connection. Too many connections.\n");
 			socket_close(accepted);
+			statistics->rejected_connections += 1;
 		}
 	}
 }
 
 int
-process_connection_connections(connection_storage* connection_storage, selectable_set* selectable)
+process_connection_connections(connection_storage* connection_storage, selectable_set* selectable,
+                               connection_statistics* statistics)
 {
 	int highest_handle = 0;
 	int connection_index;
@@ -114,6 +139,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 		if(connection->pending_disconnect && connection->send_bytes == 0)
 		{
 			connection_disconnect(connection);
+			statistics->disconnections += 1;
 		}
             
 		if(!connection->socket)
@@ -133,7 +159,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 
 void
 process_connection_network_io(connection_storage* connection_storage, selectable_set* selectable,
-                          char* io_buffer, int io_buffer_size)
+                              char* io_buffer, int io_buffer_size, connection_statistics* statistics)
 {
 	int connection_index;
 	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
@@ -153,6 +179,7 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 				}
 				else
 				{
+					statistics->disconnections += 1;
 					connection_disconnect(connection);
 					break;
 				}
@@ -170,6 +197,7 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 			}
 			else
 			{
+				statistics->disconnections += 1;
 				connection_disconnect(connection);
 			}
 		}
@@ -186,6 +214,9 @@ main(int argc, char* argv[])
 
     timer timer;
     timer_initialize(&timer);
+
+    connection_statistics statistics;
+    memset(&statistics, 0, sizeof(statistics));
 
     socket_initialize();
 
@@ -206,26 +237,31 @@ main(int argc, char* argv[])
 
     char* receive_data_buffer = malloc(MAX_PACKET_SIZE);
 
+    float last_print_time = 0.0f;
+
     int running = 1;
     while(running && !platform_quit)
     {
-	    print_server_info(100, server_address_string, &connection_storage, &timer);
+	    last_print_time = print_server_info(server_address_string, &connection_storage, &timer,
+	                                        &statistics, last_print_time);
 	    
 	    selectable_set_clear(&selectable);
 	    selectable_set_set_read(&selectable, server_socket);
 
-	    int highest_handle = process_connection_connections(&connection_storage, &selectable);
+	    int highest_handle = process_connection_connections(&connection_storage, &selectable,
+	                                                        &statistics);
 	    if(server_socket > highest_handle)
 		    highest_handle = server_socket;
 
 	    int selected = selectable_set_select(&selectable, highest_handle, 10);
 
 	    // NOTE: Process already connected connections before accepting new connections.
-	    process_connection_network_io(&connection_storage, &selectable, receive_data_buffer, MAX_PACKET_SIZE);
+	    process_connection_network_io(&connection_storage, &selectable, receive_data_buffer,
+	                                  MAX_PACKET_SIZE, &statistics);
 
 	    if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
 	    {
-		    accept_incoming_connections(selected, server_socket, &connection_storage);
+		    accept_incoming_connections(selected, server_socket, &connection_storage, &statistics);
 	    }
 
 	    timer_end_frame(&timer);
