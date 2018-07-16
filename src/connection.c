@@ -11,14 +11,15 @@ typedef struct connection_file_transfer
 
 typedef struct connection
 {
-    socket_handle				socket;
-    socket_address				address;
-	char						address_string[INET_STRADDR_LENGTH];
-    int							pending_disconnect;
-    int							send_bytes;
-    char*						send_data;
-	int							transfer_in_progress;
-	connection_file_transfer	transfer;
+    socket_handle			 socket;
+    socket_address			 address;
+	char					 address_string[INET_STRADDR_LENGTH];
+    int                      socket_initialized;
+    int						 pending_disconnect;
+    int						 send_bytes;
+    char*					 send_data;
+	int						 transfer_in_progress;
+	connection_file_transfer transfer;
 } connection;
 
 typedef struct connection_storage
@@ -47,6 +48,7 @@ create_connection_storage(int capacity)
     connection_storage.count    = 0;
     connection_storage.capacity = capacity;
     connection_storage.connections  = (connection*)malloc(sizeof(connection) * capacity);
+    memset(connection_storage.connections, 0, sizeof(connection) * capacity);
 
     return connection_storage;
 }
@@ -79,6 +81,7 @@ create_new_connection(connection_storage* connection_storage)
         new_connection->socket				 = 0;
         new_connection->pending_disconnect	 = 0;
         new_connection->transfer_in_progress = 0;
+        new_connection->socket_initialized   = 0;
     }
     return new_connection;
 }

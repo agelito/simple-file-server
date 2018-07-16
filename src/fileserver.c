@@ -146,8 +146,6 @@ accept_incoming_connections(int count, socket_handle socket, connection_storage*
 		connection* new_connection  = create_new_connection(connection_storage);
 		if(new_connection != 0)
 		{
-			socket_set_nonblocking(accepted);
-
 			new_connection->socket  = accepted;
 			new_connection->address = accepted_address;
             
@@ -228,6 +226,12 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 
 		if(selectable_set_can_read(selectable, connection->socket))
 		{
+            if(!connection->socket_initialized)
+            {
+                socket_set_nonblocking(connection->socket);
+                connection->socket_initialized = 1;
+            }
+
 			int recv_result = socket_recv(connection->socket, io_buffer, io_buffer_size);
 			if(recv_result > 0)
 			{

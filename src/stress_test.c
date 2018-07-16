@@ -4,7 +4,7 @@
 #include "protocol.h"
 
 #define TEST_ITERATIONS         1024
-#define TEST_CONNECTION_COUNT	256
+#define TEST_CONNECTION_COUNT   256
 
 void
 create_connections(int count, int iterations)
@@ -46,8 +46,6 @@ create_connections(int count, int iterations)
 			socket_handle socket = *(sockets + i);
 			socket_close(socket);
 		}
-
-        thread_sleep(100);
 	}
 }
 

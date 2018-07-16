@@ -68,7 +68,7 @@ void
 socket_close(socket_handle socket)
 {
 	int close_result = closesocket((SOCKET)socket);
-    if(close_result != 0) SOCKET_CHECK_ERROR();
+    if(close_result != 0) SOCKET_CHECK_ERROR_NO_PANIC();
 }
 
 void
@@ -99,8 +99,9 @@ socket_set_blocking(socket_handle socket)
 void
 socket_set_nolinger(socket_handle socket)
 {
-    setsockopt((SOCKET)socket, SOL_SOCKET, SO_DONTLINGER, 0, 0);
-    SOCKET_CHECK_ERROR_NO_PANIC();
+    int optval = 0;
+    int opt_result = setsockopt((SOCKET)socket, SOL_SOCKET, SO_DONTLINGER, (const char*)&optval, sizeof(int));
+    if(opt_result == SOCKET_ERROR) SOCKET_CHECK_ERROR_NO_PANIC();
 }
 
 void
