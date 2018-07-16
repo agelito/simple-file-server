@@ -46,7 +46,7 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
 
-        last_print_time = timer->elapsed_seconds;
+        last_print_time = (float)timer->elapsed_seconds;
     }
 
     return last_print_time;
@@ -188,8 +188,8 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 
 		selectable_set_set_read(selectable, connection->socket);
 
-		if(connection->socket > highest_handle)
-			highest_handle = connection->socket;
+		if((int)connection->socket > highest_handle)
+			highest_handle = (int)connection->socket;
 	}
 
 	return highest_handle;
@@ -288,8 +288,8 @@ main(int argc, char* argv[])
 
 	    int highest_handle = process_connection_connections(&connection_storage, &selectable,
 	                                                        &statistics);
-	    if(server_socket > highest_handle)
-		    highest_handle = server_socket;
+	    if((int)server_socket > highest_handle)
+		    highest_handle = (int)server_socket;
 
 	    int selected = selectable_set_select(&selectable, highest_handle, 10);
 

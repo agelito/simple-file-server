@@ -7,7 +7,7 @@
 #pragma comment(lib, "Ws2_32.lib")
 
 int 
-socket_check_error() 
+socket_check_error(char* function) 
 {
     int error = WSAGetLastError();
     if(error == WSAEWOULDBLOCK)
@@ -22,7 +22,7 @@ socket_check_error()
                       NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                       message, sizeof(message), NULL);
 
-        printf("WSA Error:\n%S\n", message);
+        printf("WSA Error (%s):\n%S\n", function, message);
     }
 
     return error;
@@ -67,7 +67,8 @@ socket_create_tcp()
 void
 socket_close(socket_handle socket)
 {
-	closesocket((SOCKET)socket);
+	int close_result = closesocket((SOCKET)socket);
+    if(close_result != 0) SOCKET_CHECK_ERROR();
 }
 
 void
@@ -76,7 +77,7 @@ socket_enable_broadcast(socket_handle socket)
 	int allow_broadcast = 1;
 	setsockopt((SOCKET)socket, SOL_SOCKET, SO_BROADCAST,
 	           (char*)&allow_broadcast, sizeof(allow_broadcast));
-	SOCKET_CHECK_ERROR();
+	SOCKET_CHECK_ERROR_NO_PANIC();
 }
 
 void 
@@ -84,7 +85,22 @@ socket_set_nonblocking(socket_handle socket)
 {
 	u_long blocking = 1;
 	ioctlsocket((SOCKET)socket, FIONBIO, &blocking);
-	SOCKET_CHECK_ERROR();
+	SOCKET_CHECK_ERROR_NO_PANIC();
+}
+
+void
+socket_set_blocking(socket_handle socket)
+{
+    u_long blocking = 0;
+	ioctlsocket((SOCKET)socket, FIONBIO, &blocking);
+	SOCKET_CHECK_ERROR_NO_PANIC();
+}
+
+void
+socket_set_nolinger(socket_handle socket)
+{
+    setsockopt((SOCKET)socket, SOL_SOCKET, SO_DONTLINGER, 0, 0);
+    SOCKET_CHECK_ERROR_NO_PANIC();
 }
 
 void
@@ -159,7 +175,7 @@ int
 socket_recv(socket_handle socket, char* recv_buffer, int recv_length)
 {
 	int recv_result = recv(socket, recv_buffer, recv_length, 0);
-	if(recv_result == -1) SOCKET_CHECK_ERROR();
+	if(recv_result == -1) SOCKET_CHECK_ERROR_NO_PANIC();
 	return recv_result;
 }
 
@@ -177,6 +193,18 @@ socket_accept(socket_handle socket, socket_address* address)
 {
 	int address_length = sizeof(struct sockaddr_in);
 	socket_handle accepted = (socket_handle)accept((SOCKET)socket, (struct sockaddr*)address, &address_length);
-	if(accepted == -1) SOCKET_CHECK_ERROR();
+	if(accepted == INVALID_SOCKET) 
+    {
+        SOCKET_CHECK_ERROR();
+        accepted = 0;
+    }
 	return accepted;
+}
+
+void
+socket_connect(socket_handle socket, socket_address* address)
+{
+    int address_length = sizeof(struct sockaddr_in);
+    int connect_result = connect((SOCKET)socket, (struct sockaddr*)address, address_length);
+    if(connect_result == SOCKET_ERROR) SOCKET_CHECK_ERROR();
 }

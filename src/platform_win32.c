@@ -11,6 +11,8 @@
 #include "socket_win32.c"
 #include "selectable_win32.c"
 
+int platform_quit = 0;
+
 void
 thread_sleep(int milliseconds)
 {

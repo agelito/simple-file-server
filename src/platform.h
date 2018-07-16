@@ -9,7 +9,8 @@
 
 #define UNUSED(parameter) (void)(parameter)
 
-#define SOCKET_CHECK_ERROR() if(socket_check_error() != 0) panic(1)
+#define SOCKET_CHECK_ERROR() if(socket_check_error(__FUNCTION__) != 0) panic(1)
+#define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error(__FUNCTION__)
 
 extern int platform_quit;
 
@@ -52,7 +53,7 @@ uint64_t time_get_cycles();
 void console_init();
 void console_clear();
 
-int				socket_check_error();
+int				socket_check_error(char* function);
 void			socket_initialize();
 void			socket_shutdown();
 socket_handle	socket_create_udp();
@@ -60,6 +61,7 @@ socket_handle	socket_create_tcp();
 void			socket_close(socket_handle socket);
 void			socket_set_nonblocking(socket_handle socket);
 void            socket_set_blocking(socket_handle socket);
+void            socket_set_nolinger(socket_handle socket);
 void			socket_enable_broadcast(socket_handle socket);
 void			socket_address_to_string(socket_address* address, char* string_buffer,
 			                             int string_buffer_length);

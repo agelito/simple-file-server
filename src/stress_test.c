@@ -23,6 +23,7 @@ create_connections(int count, int iterations)
 		for(i = 0; i < count; ++i)
 		{
 			socket_handle socket = socket_create_tcp();
+            socket_set_nolinger(socket);
 			socket_set_blocking(socket);
 			*(sockets + i) = socket;
 		}
@@ -45,12 +46,17 @@ create_connections(int count, int iterations)
 			socket_handle socket = *(sockets + i);
 			socket_close(socket);
 		}
+
+        thread_sleep(100);
 	}
 }
 
 int
 main(int argc, char* argv[])
 {
+    UNUSED(argc);
+    UNUSED(argv);
+
 	socket_initialize();
 
 	create_connections(TEST_CONNECTION_COUNT, TEST_ITERATIONS);

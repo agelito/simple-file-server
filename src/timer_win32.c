@@ -32,6 +32,7 @@ timer_initialize(timer* timer)
     timer->frame_cycles = 0;
     timer->elapsed_counter = 0;
     timer->delta_milliseconds = 0.0;
+    timer->elapsed_seconds = 0.0;
     timer->frames_per_second = 0.0;
     timer->megacycles_per_frame = 0.0;
     timer->frame_counter = 0;
@@ -43,6 +44,7 @@ timer_reset_accumulators(timer* timer)
     timer->delta_milliseconds = 0.0;
     timer->frames_per_second = 0.0;
     timer->megacycles_per_frame = 0.0;
+    timer->frame_counter = 0;
 }
 
 void
@@ -62,6 +64,8 @@ timer_end_frame(timer* timer)
     timer->delta_milliseconds += (((1000.0 * (double)timer->elapsed_counter) / (double)timer->performance_frequency));
     timer->frames_per_second += (double)timer->performance_frequency / (double)timer->elapsed_counter;
     timer->megacycles_per_frame += ((double)timer->frame_cycles / (1000.0 * 1000.0));
+
+    timer->elapsed_seconds += ((double)timer->elapsed_counter / (double)timer->performance_frequency);
 
     timer->frame_counter++;
 }
