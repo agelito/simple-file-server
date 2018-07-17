@@ -2,11 +2,11 @@
 
 typedef struct connection_file_transfer
 {
-	char*	file_name;
 	int		file_size;
 	int		received_bytes;
 	int		chunk_count;
 	int		chunk_completed;
+	char	file_name[MAX_FILE_NAME];
 } connection_file_transfer;
 
 typedef struct connection
@@ -82,6 +82,13 @@ create_new_connection(connection_storage* connection_storage)
         new_connection->pending_disconnect	 = 0;
         new_connection->transfer_in_progress = 0;
         new_connection->socket_initialized   = 0;
+
+        // TODO: The size of send buffer is arbritrary, need to tweak
+        // depending on desired memory footprint.
+        // TODO: May want to allocate memory for the connections when
+        // creating the connection storage initially.
+        new_connection->send_data = malloc(MAX_PACKET_SIZE * 24);
+        new_connection->send_bytes = 0;
     }
     return new_connection;
 }
@@ -106,6 +113,12 @@ remove_connection_index(connection_storage* connection_storage, int index)
         connection->socket = 0;
     }
 
+    if(connection->send_data)
+    {
+        free(connection->send_data);
+        connection->send_data = 0;
+    }
+
     int new_count = connection_storage->count - 1;
     if(new_count > 0)
     {
@@ -115,12 +128,12 @@ remove_connection_index(connection_storage* connection_storage, int index)
     connection_storage->count = new_count;
 }
 
-void
-connection_push_packet(connection* connection, int packet_type, char* packet_data, int packet_length)
+int
+connection_push_packet(connection* connection, char packet_type, char* packet_data, short packet_length)
 {
     char* send_data = connection->send_data;
 
-    int full_packet_length = sizeof(packet_header) + packet_length;
+    short full_packet_length = sizeof(packet_header) + packet_length;
     int remaining_bytes = MAX_PACKET_SIZE - connection->send_bytes;
     if(full_packet_length < remaining_bytes)
     {
@@ -133,14 +146,63 @@ connection_push_packet(connection* connection, int packet_type, char* packet_dat
         if(packet_length > 0)
         {
             memcpy(send_data, packet_data, packet_length);
-            connection->send_bytes += full_packet_length;
         }
+
+        connection->send_bytes += full_packet_length;
+
+        return 1;
     }
+
+    return 0;
 }
 
-void
-connection_push_empty_packet(connection* connection, int packet_type)
+int
+connection_push_empty_packet(connection* connection, char packet_type)
 {
-    connection_push_packet(connection, packet_type, 0, 0);
+    return connection_push_packet(connection, packet_type, 0, 0);
+}
+
+void 
+connection_protocol_error(connection* connection)
+{
+    connection_push_empty_packet(connection, PACKET_INVALID_PROTOCOL);
+    connection->pending_disconnect = 1;
+}
+
+int
+connection_send_network_data(connection* connection)
+{
+    int sent_bytes = 0;
+    while(sent_bytes < connection->send_bytes)
+    {
+        int remaining = connection->send_bytes - sent_bytes;
+        int send_result =
+            socket_send(connection->socket, connection->send_data + sent_bytes, remaining);
+        if(send_result > 0)
+        {
+            sent_bytes += send_result;
+        }
+        else
+        {
+            connection_disconnect(connection);
+            sent_bytes = -1;
+            break;
+        }
+    }
+
+    connection->send_bytes = 0;
+    return sent_bytes;
+}
+
+int
+connection_recv_network_data(connection* connection, char* io_buffer, int io_buffer_size)
+{
+    int recv_result = socket_recv(connection->socket, io_buffer, io_buffer_size);
+    if(recv_result == -1)
+    {
+        connection_disconnect(connection);
+    }
+
+    return recv_result;
 }
 

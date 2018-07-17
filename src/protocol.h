@@ -18,10 +18,11 @@
 #define PACKET_FILE_UPLOAD_CHUNK 0x21
 #define PACKET_FILE_UPLOAD_FINAL 0x22
 
+#pragma pack(push, 1)
 typedef struct packet_header
 {
-    int packet_type;
-    int packet_size;
+    char  packet_type;
+    short packet_size;
 } packet_header;
 
 typedef struct packet_file_upload_begin
@@ -36,5 +37,6 @@ typedef struct packet_file_upload_chunk
 {
 	int chunk_size;
 } packet_file_upload_chunk;
+#pragma pack(pop)
 
 #endif // PROTOCOL_H_INCLUDED

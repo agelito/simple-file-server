@@ -3,6 +3,7 @@
 #include "platform.h"
 #include "protocol.h"
 
+#include "string_sanitize.c"
 #include "connection.c"
 
 #define MAX_CONNECTION_COUNT 1024
@@ -11,6 +12,8 @@ typedef struct connection_statistics {
 	int connections;
 	int rejected_connections;
 	int disconnections;
+    int sent_bytes;
+    int recv_bytes;
 } connection_statistics;
 
 float
@@ -29,7 +32,6 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
                timer->frames_per_second * average, 
                timer->megacycles_per_frame * average,
                timer->elapsed_seconds);
-    
         timer_reset_accumulators(timer);
 
         if(statistics->connections)
@@ -38,10 +40,18 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
 	        printf("%-20s: %d\n", "Disconnected", statistics->disconnections);
         if(statistics->rejected_connections)
 	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
+        if(statistics->sent_bytes)
+            printf("%-20s: %.02fb/f %db/s\n", "Outgoing", 
+                   (float)statistics->sent_bytes * average, statistics->sent_bytes);
+        if(statistics->recv_bytes)
+            printf("%-20s: %.02fb/f %db/s\n", "Incoming", 
+                   (float)statistics->recv_bytes * average, statistics->recv_bytes);
 
         statistics->connections			 = 0;
         statistics->disconnections		 = 0;
         statistics->rejected_connections = 0;
+        statistics->sent_bytes           = 0;
+        statistics->recv_bytes           = 0;
         
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
@@ -53,19 +63,17 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
 }
 
 void
-connection_upload_begin(connection* connection, char* packet_body, int body_length)
+fileserver_upload_begin(connection* connection, char* packet_body, int body_length)
 {
 	if(body_length < sizeof(packet_file_upload_begin))
 	{
-		// TODO: Send protocol error packet.
-		connection->pending_disconnect = 1;
+        connection_protocol_error(connection);
 		return;
 	}
 	
 	if(connection->transfer_in_progress)
 	{
-		// TODO: Send protocol error packet.
-		connection->pending_disconnect = 1;
+        connection_protocol_error(connection);
 		return;
 	}
 
@@ -74,42 +82,45 @@ connection_upload_begin(connection* connection, char* packet_body, int body_leng
 	int packet_size_with_filename = sizeof(packet_file_upload_begin) + upload_begin->file_name_length;
 	if(body_length != packet_size_with_filename)
 	{
-		// TODO: Send protocol error packet.
-		connection->pending_disconnect = 1;
+        connection_protocol_error(connection);
 		return;
 	}
 
 	connection->transfer_in_progress = 1;
 	connection->transfer.file_size	 = upload_begin->file_size;
 	connection->transfer.chunk_count = upload_begin->chunk_count;
-	// TODO: Sanitize and assign file name.
+
+    char* packet_file_name = (char*)(packet_body + sizeof(packet_file_upload_begin));
+    santitize_file_name(packet_file_name, upload_begin->file_name_length, connection->transfer.file_name, MAX_FILE_NAME);
 
 	connection->transfer.received_bytes	 = 0;
 	connection->transfer.chunk_completed = 0;
 }
 
 void 
-connection_receive_packet_body(connection* connection, int packet_type, char* packet_body, int body_length)
+fileserver_receive_packet_body(connection* connection, int packet_type, char* packet_body, int body_length)
 {
     UNUSED(packet_body);
     UNUSED(body_length);
 
     switch(packet_type)
     {
-    case PACKET_DISCONNECT: break;
+    case PACKET_DISCONNECT: 
+        connection->pending_disconnect = 1;
+        break;
     case PACKET_FILE_UPLOAD_BEGIN:
-	    connection_upload_begin(connection, packet_body, body_length);
-    break;
+	    fileserver_upload_begin(connection, packet_body, body_length);
+        break;
     case PACKET_FILE_UPLOAD_CHUNK: break;
     case PACKET_FILE_UPLOAD_FINAL: break;
     default: 
-        connection->pending_disconnect = 1;
+        connection_protocol_error(connection);
         break;
     }
 }
 
 void
-connection_receive_packet(connection* connection, char* data, int length)
+fileserver_receive_packets(connection* connection, char* data, int length)
 {
     int remaining_bytes = length;
     while(remaining_bytes > 0)
@@ -122,8 +133,8 @@ connection_receive_packet(connection* connection, char* data, int length)
         }
 
         char* packet_data_body = (char*)header + sizeof(packet_header);
-        connection_receive_packet_body(connection, header->packet_type, packet_data_body,
-                                   header->packet_size - sizeof(packet_header));
+        fileserver_receive_packet_body(connection, header->packet_type, packet_data_body,
+                                       header->packet_size - sizeof(packet_header));
 
         data = (data + header->packet_size);
     }
@@ -201,27 +212,18 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
 	{
 		connection* connection = (connection_storage->connections + connection_index);
+
 		if(selectable_set_can_write(selectable, connection->socket))
 		{
-			int sent_bytes = 0;
-			while(sent_bytes < connection->send_bytes)
-			{
-				int remaining = connection->send_bytes - sent_bytes;
-				int send_result =
-					socket_send(connection->socket, connection->send_data + sent_bytes, remaining);
-				if(send_result > 0)
-				{
-					sent_bytes += send_result;
-				}
-				else
-				{
-					statistics->disconnections += 1;
-					connection_disconnect(connection);
-					break;
-				}
-			}
+            if(!connection->socket_initialized)
+            {
+                socket_set_nonblocking(connection->socket);
+                connection->socket_initialized = 1;
+            }
 
-			connection->send_bytes = 0;
+			int sent_bytes = connection_send_network_data(connection);
+            if(sent_bytes > 0) statistics->sent_bytes += sent_bytes;
+            else if(sent_bytes == -1) statistics->disconnections += 1;
 		}
 
 		if(selectable_set_can_read(selectable, connection->socket))
@@ -232,16 +234,17 @@ process_connection_network_io(connection_storage* connection_storage, selectable
                 connection->socket_initialized = 1;
             }
 
-			int recv_result = socket_recv(connection->socket, io_buffer, io_buffer_size);
-			if(recv_result > 0)
-			{
-				connection_receive_packet(connection, io_buffer, recv_result);
-			}
-			else
-			{
-				statistics->disconnections += 1;
-				connection_disconnect(connection);
-			}
+            int recv_bytes = connection_recv_network_data(connection, io_buffer, io_buffer_size);
+            if(recv_bytes > 0)
+            {
+                statistics->recv_bytes += recv_bytes;
+				fileserver_receive_packets(connection, io_buffer, recv_bytes);
+            }
+            else if(recv_bytes == -1) 
+            {
+                // TODO: Not good -1 implying the connection was disconnected.
+                statistics->disconnections += 1;
+            }
 		}
 	}
 }
