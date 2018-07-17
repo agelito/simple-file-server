@@ -9,8 +9,8 @@
 
 #define UNUSED(parameter) (void)(parameter)
 
-#define SOCKET_CHECK_ERROR() if(socket_check_error(__FUNCTION__) != 0) panic(1)
-#define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error(__FUNCTION__)
+#define SOCKET_CHECK_ERROR() if(socket_check_error((char*)__func__) != 0) panic(1)
+#define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)__func__)
 
 extern int platform_quit;
 

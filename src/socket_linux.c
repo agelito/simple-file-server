@@ -11,7 +11,7 @@
 #include <netinet/udp.h>
 
 int
-socket_check_error()
+socket_check_error(char* function)
 {
 	int error = errno;
 	if(error == EWOULDBLOCK || error == EAGAIN)
@@ -21,7 +21,7 @@ socket_check_error()
 	else if(error != 0)
 	{
 		char* error_string = strerror(error);
-		printf("Error: (%d) %s\n", error, error_string);
+		printf("Error: (%s)(%d) %s\n", function, error, error_string);
 	}
 
 	return error;

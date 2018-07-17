@@ -152,13 +152,14 @@ accept_incoming_connections(int count, socket_handle socket, connection_storage*
 	{
 		socket_address accepted_address;
 		socket_handle accepted = socket_accept(socket, &accepted_address);
-		if(accepted == 0) break;
+		if(accepted == 0 || accepted == -1) break;
 
 		connection* new_connection  = create_new_connection(connection_storage);
 		if(new_connection != 0)
 		{
 			new_connection->socket  = accepted;
 			new_connection->address = accepted_address;
+			new_connection->socket_initialized = 0;
             
 			socket_address_to_string(&accepted_address, new_connection->address_string,
 			                         INET_STRADDR_LENGTH);
@@ -223,7 +224,6 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 
 			int sent_bytes = connection_send_network_data(connection);
             if(sent_bytes > 0) statistics->sent_bytes += sent_bytes;
-            else if(sent_bytes == -1) statistics->disconnections += 1;
 		}
 
 		if(selectable_set_can_read(selectable, connection->socket))
@@ -233,17 +233,12 @@ process_connection_network_io(connection_storage* connection_storage, selectable
                 socket_set_nonblocking(connection->socket);
                 connection->socket_initialized = 1;
             }
-
+            
             int recv_bytes = connection_recv_network_data(connection, io_buffer, io_buffer_size);
             if(recv_bytes > 0)
             {
                 statistics->recv_bytes += recv_bytes;
 				fileserver_receive_packets(connection, io_buffer, recv_bytes);
-            }
-            else if(recv_bytes == -1) 
-            {
-                // TODO: Not good -1 implying the connection was disconnected.
-                statistics->disconnections += 1;
             }
 		}
 	}
@@ -266,7 +261,8 @@ main(int argc, char* argv[])
     socket_initialize();
 
     socket_handle server_socket = socket_create_tcp();
-
+    socket_set_nonblocking(server_socket);
+    
     socket_address server_address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
 
     socket_bind(server_socket, server_address);
