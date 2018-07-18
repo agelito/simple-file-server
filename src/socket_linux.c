@@ -34,7 +34,7 @@ socket_initialize()
 }
 
 void
-socket_shutdown()
+socket_cleanup()
 {
 
 }

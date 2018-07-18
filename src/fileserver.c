@@ -9,13 +9,26 @@
 
 #define TARGET_UPS 1000
 
-typedef struct connection_statistics {
+typedef struct connection_statistics
+{
 	int connections;
 	int rejected_connections;
 	int disconnections;
     int sent_bytes;
     int recv_bytes;
 } connection_statistics;
+
+typedef struct fileserver
+{
+	socket_handle server_socket;
+	float last_print_time;
+	char address_string[INET_STRADDR_LENGTH];
+	connection_storage connection_storage;
+	connection_statistics statistics;
+	selectable_set selectable;
+	timer timer;
+	char* receive_data_buffer;
+} fileserver;
 
 float
 print_server_info(char* listen_address, connection_storage* connection_storage,
@@ -138,6 +151,7 @@ fileserver_receive_packets(connection* connection, char* data, int length)
                                        header->packet_size - sizeof(packet_header));
 
         data = (data + header->packet_size);
+        remaining_bytes -= header->packet_size;
     }
 }
 
@@ -270,6 +284,7 @@ wait_for_target_ups(measure_time* measure, double target_delta)
         accumulator += measure->delta_time;
 
         double remaining = (target_delta - accumulator);
+        
         int remaining_milliseconds = (int)(remaining * 1000);
         if(remaining_milliseconds > sleep_epsilon)
         {
@@ -278,6 +293,42 @@ wait_for_target_ups(measure_time* measure, double target_delta)
 
         measure_tick(measure);
     }
+}
+
+void
+fileserver_tick(fileserver* fileserver)
+{
+	fileserver->last_print_time = print_server_info(fileserver->address_string,
+	                                                &fileserver->connection_storage,
+	                                                &fileserver->timer,
+	                                                &fileserver->statistics,
+	                                                fileserver->last_print_time);
+
+	selectable_set_clear(&fileserver->selectable);
+
+	int highest_handle = process_connection_connections(&fileserver->connection_storage,
+	                                                    &fileserver->selectable,
+	                                                    &fileserver->statistics);
+
+	int selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+	if(selected > 0)
+	{
+		// NOTE: Process already connected connections before accepting new connections.
+		process_connection_network_io(&fileserver->connection_storage, &fileserver->selectable,
+		                              fileserver->receive_data_buffer,
+		                              MAX_PACKET_SIZE, &fileserver->statistics);
+	}
+
+	selectable_set_clear(&fileserver->selectable);
+	selectable_set_set_read(&fileserver->selectable, fileserver->server_socket);
+
+	highest_handle = fileserver->server_socket + 1;
+	selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+
+	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->server_socket))
+	{
+		accept_incoming_connections(selected, fileserver->server_socket, &fileserver->connection_storage, &fileserver->statistics);
+	}
 }
 
 int 
@@ -313,45 +364,23 @@ main(int argc, char* argv[])
 
     socket_listen(server_socket);
 
-    selectable_set selectable = selectable_set_create();
+    // selectable_set selectable = selectable_set_create();
 
     connection_storage connection_storage = create_connection_storage(MAX_CONNECTION_COUNT);
 
     char* receive_data_buffer = malloc(MAX_PACKET_SIZE);
 
-    float last_print_time = 0.0f;
-
     double target_frame_delta = 1.0 / TARGET_UPS;
+
+    fileserver fileserver;
+    memset(&fileserver, 0, sizeof(fileserver));
 
     int running = 1;
     while(running && !platform_quit)
     {
-	    last_print_time = print_server_info(server_address_string, &connection_storage, &timer,
-	                                        &statistics, last_print_time);
-
-        selectable_set_clear(&selectable);
-
-	    int highest_handle = process_connection_connections(&connection_storage, &selectable,
-	                                                        &statistics);
-
-	    int selected = selectable_set_select_noblock(&selectable, highest_handle);
-        if(selected > 0)
-        {
-            // NOTE: Process already connected connections before accepting new connections.
-            process_connection_network_io(&connection_storage, &selectable, receive_data_buffer,
-                                          MAX_PACKET_SIZE, &statistics);
-        }
-
-        selectable_set_clear(&selectable);
-	    selectable_set_set_read(&selectable, server_socket);
-
-        highest_handle = server_socket + 1;
-        selected = selectable_set_select_noblock(&selectable, highest_handle);
-
-	    if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
-	    {
-		    accept_incoming_connections(selected, server_socket, &connection_storage, &statistics);
-	    }
+#if 0 // TODO: Implement
+	    fileserver_tick(&fileserver);
+#endif
 
         measure_tick(&measure);
 

@@ -15,7 +15,7 @@ uint64_t
 time_get_nanoseconds()
 {
     struct timespec timespec;
-    clock_gettime(CLOCK_MONOTONIC, &timespec);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &timespec);
 
     uint64_t nanoseconds = timespec.tv_sec * NANOSECOND;
     nanoseconds += timespec.tv_nsec;
@@ -67,4 +67,22 @@ timer_end_frame(timer* timer)
     timer->elapsed_seconds += ((double)timer->elapsed_counter / (double)NANOSECOND);
 
     timer->frame_counter++;
+}
+
+void
+measure_initialize(measure_time* measure)
+{
+	measure->performance_frequency = 0;
+	measure->performance_counter = time_get_nanoseconds();
+	measure->delta_time = 0.0;
+}
+
+void
+measure_tick(measure_time* measure)
+{
+	int64_t current_time = time_get_nanoseconds();
+	double elapsed_time = (current_time - measure->performance_counter);
+	measure->performance_counter = current_time;
+	
+	measure->delta_time = ((double)elapsed_time / (double)NANOSECOND);
 }

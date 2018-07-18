@@ -64,3 +64,12 @@ int selectable_set_select(selectable_set* set, int highest_handle, int timeout_m
 	
 	return select(highest_handle + 1, (fd_set*)set->read, (fd_set*)set->write, 0, &select_timeout);
 }
+
+int selectable_set_select_noblock(selectable_set* set, int highest_handle)
+{
+	struct timeval select_timeout;
+	select_timeout.tv_sec = 0;
+	select_timeout.tv_usec = 1;
+	
+	return select(highest_handle + 1, (fd_set*)set->read, (fd_set*)set->write, 0, &select_timeout);
+}

@@ -7,7 +7,7 @@
 #include "connection.c"
 
 #define TEST_ITERATIONS         1024
-#define TEST_CONNECTION_COUNT   1024
+#define TEST_CONNECTION_COUNT   256
 
 void
 create_connections(int count, int iterations)

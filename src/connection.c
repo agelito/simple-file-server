@@ -77,6 +77,7 @@ destroy_connection_storage(connection_storage* connection_storage)
 
         if(connection->send_data)
             free(connection->send_data);
+        
         connection->send_data = 0;
         connection->send_bytes = 0;
     }
@@ -95,7 +96,14 @@ create_new_connection(connection_storage* connection_storage)
     if(connection_storage->count < connection_storage->capacity)
     {
         new_connection = (connection_storage->connections + connection_storage->count++);
-        memset(new_connection, 0, sizeof(connection));
+
+        new_connection->socket				 = 0;
+        new_connection->socket_initialized	 = 0;
+        new_connection->pending_disconnect	 = 0;
+        new_connection->send_bytes			 = 0;
+        new_connection->transfer_in_progress = 0;
+        
+        memset(&new_connection->transfer, 0, sizeof(connection_file_transfer));
     }
     return new_connection;
 }
