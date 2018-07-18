@@ -41,10 +41,10 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
         if(statistics->rejected_connections)
 	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
         if(statistics->sent_bytes)
-            printf("%-20s: %.02fb/f %db/s\n", "Outgoing", 
+            printf("%-20s: %.02fb/u %db/s\n", "Outgoing", 
                    (float)statistics->sent_bytes * average, statistics->sent_bytes);
         if(statistics->recv_bytes)
-            printf("%-20s: %.02fb/f %db/s\n", "Incoming", 
+            printf("%-20s: %.02fb/u %db/s\n", "Incoming", 
                    (float)statistics->recv_bytes * average, statistics->recv_bytes);
 
         statistics->connections			 = 0;
