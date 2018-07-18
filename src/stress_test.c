@@ -6,7 +6,7 @@
 #include "connection.c"
 
 #define TEST_ITERATIONS         1024
-#define TEST_CONNECTION_COUNT   256
+#define TEST_CONNECTION_COUNT   1024
 
 void
 create_connections(int count, int iterations)
@@ -69,8 +69,6 @@ create_connections(int count, int iterations)
             remove_connection_index(&connections, i--);
             connection_disconnect(connection);
 		}
-
-        thread_sleep(50);
 	}
     
     destroy_connection_storage(&connections);
@@ -86,7 +84,7 @@ main(int argc, char* argv[])
 
 	create_connections(TEST_CONNECTION_COUNT, TEST_ITERATIONS);
 
-	socket_shutdown();
+	socket_cleanup();
 
 	return 0;
 }

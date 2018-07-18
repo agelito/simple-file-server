@@ -6,7 +6,7 @@
 #include "string_sanitize.c"
 #include "connection.c"
 
-#define MAX_CONNECTION_COUNT 1024
+#define TARGET_UPS 1000
 
 typedef struct connection_statistics {
 	int connections;
@@ -144,7 +144,7 @@ void
 accept_incoming_connections(int count, socket_handle socket, connection_storage* connection_storage,
                             connection_statistics* statistics)
 {
-	int max_incoming_per_frame = 32;
+	int max_incoming_per_frame = 128;
 	if(count > max_incoming_per_frame)
 		count = max_incoming_per_frame;
 	
@@ -197,6 +197,11 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 		}
 
 		selectable_set_set_read(selectable, connection->socket);
+        
+        if(connection->send_bytes > 0)
+        {
+            selectable_set_set_write(selectable, connection->socket);
+        }
 
 		if((int)connection->socket > highest_handle)
 			highest_handle = (int)connection->socket;
@@ -244,6 +249,27 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 	}
 }
 
+void
+wait_for_target_ups(measure_time* measure, double target_delta)
+{
+    int sleep_epsilon = 2;
+
+    double accumulator = 0.0;
+    while(accumulator < target_delta)
+    {
+        accumulator += measure->delta_time;
+
+        double remaining = (target_delta - accumulator);
+        int remaining_milliseconds = (int)(remaining * 1000);
+        if(remaining_milliseconds > sleep_epsilon)
+        {
+            thread_sleep(remaining_milliseconds);
+        }
+
+        measure_tick(measure);
+    }
+}
+
 int 
 main(int argc, char* argv[]) 
 {
@@ -254,6 +280,9 @@ main(int argc, char* argv[])
 
     timer timer;
     timer_initialize(&timer);
+
+    measure_time measure;
+    measure_initialize(&measure);
 
     connection_statistics statistics;
     memset(&statistics, 0, sizeof(statistics));
@@ -280,30 +309,41 @@ main(int argc, char* argv[])
 
     float last_print_time = 0.0f;
 
+    double target_frame_delta = 1.0 / TARGET_UPS;
+
     int running = 1;
     while(running && !platform_quit)
     {
 	    last_print_time = print_server_info(server_address_string, &connection_storage, &timer,
 	                                        &statistics, last_print_time);
 	    
-	    selectable_set_clear(&selectable);
-	    selectable_set_set_read(&selectable, server_socket);
+        selectable_set_clear(&selectable);
 
 	    int highest_handle = process_connection_connections(&connection_storage, &selectable,
 	                                                        &statistics);
-	    if((int)server_socket > highest_handle)
-		    highest_handle = (int)server_socket;
 
-	    int selected = selectable_set_select(&selectable, highest_handle, 10);
+	    int selected = selectable_set_select_noblock(&selectable, highest_handle);
+        if(selected > 0)
+        {
+            // NOTE: Process already connected connections before accepting new connections.
+            process_connection_network_io(&connection_storage, &selectable, receive_data_buffer,
+                                          MAX_PACKET_SIZE, &statistics);
+        }
 
-	    // NOTE: Process already connected connections before accepting new connections.
-	    process_connection_network_io(&connection_storage, &selectable, receive_data_buffer,
-	                                  MAX_PACKET_SIZE, &statistics);
+        selectable_set_clear(&selectable);
+	    selectable_set_set_read(&selectable, server_socket);
+
+        highest_handle = server_socket + 1;
+        selected = selectable_set_select_noblock(&selectable, highest_handle);
 
 	    if(selected > 0 && selectable_set_can_read(&selectable, server_socket))
 	    {
 		    accept_incoming_connections(selected, server_socket, &connection_storage, &statistics);
 	    }
+
+        measure_tick(&measure);
+
+        wait_for_target_ups(&measure, target_frame_delta);
 
 	    timer_end_frame(&timer);
     }
@@ -314,7 +354,7 @@ main(int argc, char* argv[])
 
     socket_close(server_socket);
 
-    socket_shutdown();
+    socket_cleanup();
 
     printf("Server terminated gracefully.\n");
 }

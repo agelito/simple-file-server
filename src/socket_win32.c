@@ -2,6 +2,7 @@
 
 #include "platform.h"
 
+#define FD_SETSIZE MAX_CONNECTION_COUNT+1
 #include <winsock2.h>
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -37,7 +38,7 @@ socket_initialize()
 }
 
 void
-socket_shutdown()
+socket_cleanup()
 {
 	WSACleanup();
 }
@@ -208,4 +209,10 @@ socket_connect(socket_handle socket, socket_address* address)
     int address_length = sizeof(struct sockaddr_in);
     int connect_result = connect((SOCKET)socket, (struct sockaddr*)address, address_length);
     if(connect_result == SOCKET_ERROR) SOCKET_CHECK_ERROR();
+}
+
+void
+socket_shutdown(socket_handle socket)
+{
+    shutdown(socket, SD_BOTH);
 }

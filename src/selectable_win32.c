@@ -66,3 +66,16 @@ int selectable_set_select(selectable_set* set, int highest_handle, int timeout_m
 	
 	return select(0, (FD_SET*)set->read, (FD_SET*)set->write, 0, &select_timeout);
 }
+
+
+int 
+selectable_set_select_noblock(selectable_set* set, int highest_handle)
+{
+    UNUSED(highest_handle);
+
+	struct timeval select_timeout;
+	select_timeout.tv_sec = 0;
+	select_timeout.tv_usec = 1;
+	
+	return select(0, (FD_SET*)set->read, (FD_SET*)set->write, 0, &select_timeout);
+}

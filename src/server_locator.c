@@ -79,7 +79,7 @@ main(int argc, char* argv[])
 
     socket_close(listen_socket);
 
-    socket_shutdown();
+    socket_cleanup();
 
     return 0;
 }

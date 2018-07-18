@@ -69,3 +69,29 @@ timer_end_frame(timer* timer)
 
     timer->frame_counter++;
 }
+
+void 
+measure_initialize(measure_time* measure)
+{
+    LARGE_INTEGER performance_counter_frequency;
+    QueryPerformanceFrequency(&performance_counter_frequency);
+    measure->performance_frequency = performance_counter_frequency.QuadPart;
+
+    LARGE_INTEGER performance_counter;
+    QueryPerformanceCounter(&performance_counter);
+    measure->performance_counter = performance_counter.QuadPart;
+
+    measure->delta_time = 0.0;
+}
+
+void 
+measure_tick(measure_time* measure)
+{
+
+    LARGE_INTEGER performance_counter;
+    QueryPerformanceCounter(&performance_counter);
+    
+    int64_t delta_counter = (performance_counter.QuadPart - measure->performance_counter);
+    measure->delta_time = (double)delta_counter / (double)measure->performance_frequency;
+    measure->performance_counter = performance_counter.QuadPart;
+}

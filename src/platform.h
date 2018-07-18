@@ -9,8 +9,16 @@
 
 #define UNUSED(parameter) (void)(parameter)
 
-#define SOCKET_CHECK_ERROR() if(socket_check_error((char*)__func__) != 0) panic(1)
-#define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)__func__)
+#ifdef _WIN32
+#define CURRENT_FUNCTION __FUNCTION__
+#else
+#define CURRENT_FUNCTION __func__
+#endif
+
+#define MAX_CONNECTION_COUNT 1024
+
+#define SOCKET_CHECK_ERROR() if(socket_check_error((char*)CURRENT_FUNCTION) != 0) panic(1)
+#define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)CURRENT_FUNCTION)
 
 extern int platform_quit;
 
@@ -26,6 +34,12 @@ typedef struct timer {
     double        megacycles_per_frame;
     uint64_t      frame_counter;
 } timer;
+
+typedef struct measure_time {
+    int64_t performance_frequency;
+    int64_t performance_counter;
+    double  delta_time;
+} measure_time;
 
 typedef struct socket_address {
 	uint8_t opaque_data[24];
@@ -46,6 +60,9 @@ void timer_initialize(timer* timer);
 void timer_reset_accumulators(timer* timer);
 void timer_end_frame(timer* timer);
 
+void measure_initialize(measure_time* measure);
+void measure_tick(measure_time* measure);
+
 double   time_get_seconds();
 uint64_t time_get_nanoseconds();
 uint64_t time_get_cycles();
@@ -55,7 +72,7 @@ void console_clear();
 
 int				socket_check_error(char* function);
 void			socket_initialize();
-void			socket_shutdown();
+void			socket_cleanup();
 socket_handle	socket_create_udp();
 socket_handle	socket_create_tcp();
 void			socket_close(socket_handle socket);
@@ -78,6 +95,7 @@ int             socket_sendto(socket_handle socket, char* send_buffer, int send_
                               socket_address* address);
 socket_handle   socket_accept(socket_handle socket, socket_address* address);
 void            socket_connect(socket_handle socket, socket_address* address);
+void            socket_shutdown(socket_handle socket);
 
 selectable_set	selectable_set_create();
 int  			selectable_set_can_read(selectable_set* set, socket_handle socket);
@@ -87,5 +105,6 @@ void			selectable_set_set_write(selectable_set* set, socket_handle socket);
 void			selectable_set_clear(selectable_set* set);
 void			selectable_set_destroy(selectable_set* set);
 int             selectable_set_select(selectable_set* set, int highest_handle, int timeout_milliseconds);
+int             selectable_set_select_noblock(selectable_set* set, int highest_handle);
 
 #endif // PLATFORM_H_INCLUDED
