@@ -20,6 +20,7 @@
 #define SOCKET_CHECK_ERROR() if(socket_check_error((char*)CURRENT_FUNCTION) != 0) panic(1)
 #define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)CURRENT_FUNCTION)
 
+extern char platform_path_delimiter;
 extern int platform_quit;
 
 typedef struct timer {
@@ -49,6 +50,11 @@ typedef struct selectable_set {
 	void* read;
 	void* write;
 } selectable_set;
+
+typedef struct file_mapping {
+    char* file_path;
+    
+} file_mapping;
 
 typedef uint32_t socket_handle;
 
@@ -106,5 +112,17 @@ void			selectable_set_clear(selectable_set* set);
 void			selectable_set_destroy(selectable_set* set);
 int             selectable_set_select(selectable_set* set, int highest_handle, int timeout_milliseconds);
 int             selectable_set_select_noblock(selectable_set* set, int highest_handle);
+
+void exe_set_working_directory(char* directory_path);
+void exe_get_directory(char* output, int output_length);
+
+void filesystem_create_directory(char* directory_path);
+void filesystem_delete_directory(char* directory_path);
+int  filesystem_directory_exists(char* directory_path);
+int  filesystem_open_create_file(char* file_path);
+void filesystem_close_file(int file_handle);
+void filesystem_delete_file(char* file_path);
+int  filesystem_file_exists(char* file_path);
+
 
 #endif // PLATFORM_H_INCLUDED

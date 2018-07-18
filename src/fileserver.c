@@ -4,6 +4,7 @@
 #include "protocol.h"
 
 #include "string_sanitize.c"
+#include "file_io.c"
 #include "connection.c"
 
 #define TARGET_UPS 1000
@@ -91,7 +92,7 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 	connection->transfer.chunk_count = upload_begin->chunk_count;
 
     char* packet_file_name = (char*)(packet_body + sizeof(packet_file_upload_begin));
-    santitize_file_name(packet_file_name, upload_begin->file_name_length, connection->transfer.file_name, MAX_FILE_NAME);
+    santitize_file_name(packet_file_name, upload_begin->file_name_length, connection->transfer.file_name_final, MAX_FILE_NAME);
 
 	connection->transfer.received_bytes	 = 0;
 	connection->transfer.chunk_completed = 0;
@@ -250,6 +251,15 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 }
 
 void
+fileserver_write_downloaded_data(file_io* io, connection_file_transfer* transfer)
+{
+    UNUSED(io);
+    UNUSED(transfer);
+
+    // TODO: Implement.
+}
+
+void
 wait_for_target_ups(measure_time* measure, double target_delta)
 {
     int sleep_epsilon = 2;
@@ -287,6 +297,8 @@ main(int argc, char* argv[])
     connection_statistics statistics;
     memset(&statistics, 0, sizeof(statistics));
 
+    file_io io = file_io_initialize();
+
     socket_initialize();
 
     socket_handle server_socket = socket_create_tcp();
@@ -316,7 +328,7 @@ main(int argc, char* argv[])
     {
 	    last_print_time = print_server_info(server_address_string, &connection_storage, &timer,
 	                                        &statistics, last_print_time);
-	    
+
         selectable_set_clear(&selectable);
 
 	    int highest_handle = process_connection_connections(&connection_storage, &selectable,
@@ -355,6 +367,8 @@ main(int argc, char* argv[])
     socket_close(server_socket);
 
     socket_cleanup();
+
+    file_io_destroy(&io);
 
     printf("Server terminated gracefully.\n");
 }

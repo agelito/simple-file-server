@@ -3,6 +3,7 @@
 #include "platform.h"
 #include "protocol.h"
 
+#include "file_io.c"
 #include "connection.c"
 
 #define TEST_ITERATIONS         1024

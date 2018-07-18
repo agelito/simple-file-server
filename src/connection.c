@@ -2,11 +2,12 @@
 
 typedef struct connection_file_transfer
 {
-	int		file_size;
-	int		received_bytes;
-	int		chunk_count;
-	int		chunk_completed;
-	char	file_name[MAX_FILE_NAME];
+	int	 file_size;
+	int	 received_bytes;
+	int	 chunk_count;
+	int	 chunk_completed;
+	char file_name_final[MAX_FILE_NAME];
+    file_io_file download;
 } connection_file_transfer;
 
 typedef struct connection
@@ -50,6 +51,17 @@ create_connection_storage(int capacity)
     connection_storage.connections  = (connection*)malloc(sizeof(connection) * capacity);
     memset(connection_storage.connections, 0, sizeof(connection) * capacity);
 
+    int i;
+    for(i = 0; i < connection_storage.capacity; ++i)
+    {
+        connection* connection = (connection_storage.connections + i);
+
+        // TODO: The size of send buffer is arbritrary, need to tweak
+        // depending on desired memory footprint.
+        connection->send_data = malloc(MAX_PACKET_SIZE * 4);
+        connection->send_bytes = 0;
+    }
+
     return connection_storage;
 }
 
@@ -62,6 +74,11 @@ destroy_connection_storage(connection_storage* connection_storage)
         connection* connection = (connection_storage->connections + i);
         if(connection->socket)
             socket_close(connection->socket);
+
+        if(connection->send_data)
+            free(connection->send_data);
+        connection->send_data = 0;
+        connection->send_bytes = 0;
     }
 
     connection_storage->count = 0;
@@ -78,17 +95,7 @@ create_new_connection(connection_storage* connection_storage)
     if(connection_storage->count < connection_storage->capacity)
     {
         new_connection = (connection_storage->connections + connection_storage->count++);
-        new_connection->socket				 = 0;
-        new_connection->pending_disconnect	 = 0;
-        new_connection->transfer_in_progress = 0;
-        new_connection->socket_initialized   = 0;
-
-        // TODO: The size of send buffer is arbritrary, need to tweak
-        // depending on desired memory footprint.
-        // TODO: May want to allocate memory for the connections when
-        // creating the connection storage initially.
-        new_connection->send_data = malloc(MAX_PACKET_SIZE * 24);
-        new_connection->send_bytes = 0;
+        memset(new_connection, 0, sizeof(connection));
     }
     return new_connection;
 }
@@ -113,11 +120,7 @@ remove_connection_index(connection_storage* connection_storage, int index)
         connection->socket = 0;
     }
 
-    if(connection->send_data)
-    {
-        free(connection->send_data);
-        connection->send_data = 0;
-    }
+    connection->send_bytes = 0;
 
     int new_count = connection_storage->count - 1;
     if(new_count > 0)
