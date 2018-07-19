@@ -39,9 +39,6 @@ destroy_connection_storage(connection_storage* connection_storage);
 connection* 
 create_new_connection(connection_storage* connection_storage);
 
-void 
-remove_connection(connection_storage* connection_storage, connection* connection);
-
 connection_storage 
 create_connection_storage(int capacity)
 {
@@ -69,7 +66,7 @@ void
 destroy_connection_storage(connection_storage* connection_storage)
 {
     int i;
-    for(i = 0; i < connection_storage->count; ++i)
+    for(i = 0; i < connection_storage->capacity; ++i)
     {
         connection* connection = (connection_storage->connections + i);
         if(connection->socket)
@@ -121,19 +118,21 @@ connection_disconnect(connection* connection)
 void 
 remove_connection_index(connection_storage* connection_storage, int index)
 {
-    connection* connection = (connection_storage->connections + index);
-    if(connection->socket)
+    connection* connection_at_index = (connection_storage->connections + index);
+    if(connection_at_index->socket)
     {
-        socket_close(connection->socket);
-        connection->socket = 0;
+        socket_close(connection_at_index->socket);
+        connection_at_index->socket = 0;
     }
 
-    connection->send_bytes = 0;
+    connection_at_index->send_bytes = 0;
 
     int new_count = connection_storage->count - 1;
     if(new_count > 0)
     {
+        connection removed_connection = *(connection_storage->connections + index);
         *(connection_storage->connections + index) = *(connection_storage->connections + new_count);
+        *(connection_storage->connections + new_count) = removed_connection;
     }
 
     connection_storage->count = new_count;

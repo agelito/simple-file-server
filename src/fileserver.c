@@ -20,25 +20,31 @@ typedef struct connection_statistics
 
 typedef struct fileserver
 {
-	socket_handle server_socket;
-	float last_print_time;
-	char address_string[INET_STRADDR_LENGTH];
-	connection_storage connection_storage;
-	connection_statistics statistics;
-	selectable_set selectable;
-	timer timer;
-	char* receive_data_buffer;
+	socket_handle         socket;
+    socket_address        address;
+	char                  address_string[INET_STRADDR_LENGTH];
+	selectable_set        selectable;
+	connection_storage    connection_storage;
+	char*                 receive_data_buffer;
+	timer                 timer;
+    float                 last_print_time;
+    connection_statistics statistics;
 } fileserver;
 
+
+
 float
-print_server_info(char* listen_address, connection_storage* connection_storage,
-                  timer* timer, connection_statistics* statistics, float last_print_time)
+print_server_info(fileserver* fileserver)
 {
-	if(last_print_time <= 0.0f || (timer->elapsed_seconds - last_print_time) > 1.0f)
+    timer* timer = &fileserver->timer;
+    float last_print_time = fileserver->last_print_time;
+	if(last_print_time <= 0.0f || (timer->elapsed_seconds - last_print_time) >= 1.0f)
     {
+        connection_statistics* statistics = &fileserver->statistics;
+
 	    console_clear();
 
-        printf("%-20s: %s\n", "Listen address", listen_address);
+        printf("%-20s: %s\n", "Listen address", fileserver->address_string);
 
         float average = (float)1 / timer->frame_counter;
         printf("%-20s: %.02fms %.02fups %.02fmcy %.02fs\n", "Performance", 
@@ -67,6 +73,7 @@ print_server_info(char* listen_address, connection_storage* connection_storage,
         statistics->sent_bytes           = 0;
         statistics->recv_bytes           = 0;
         
+        connection_storage* connection_storage = &fileserver->connection_storage;
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
 
@@ -276,6 +283,8 @@ fileserver_write_downloaded_data(file_io* io, connection_file_transfer* transfer
 void
 wait_for_target_ups(measure_time* measure, double target_delta)
 {
+    measure_tick(measure);
+
     int sleep_epsilon = 2;
 
     double accumulator = 0.0;
@@ -298,11 +307,7 @@ wait_for_target_ups(measure_time* measure, double target_delta)
 void
 fileserver_tick(fileserver* fileserver)
 {
-	fileserver->last_print_time = print_server_info(fileserver->address_string,
-	                                                &fileserver->connection_storage,
-	                                                &fileserver->timer,
-	                                                &fileserver->statistics,
-	                                                fileserver->last_print_time);
+	fileserver->last_print_time = print_server_info(fileserver);
 
 	selectable_set_clear(&fileserver->selectable);
 
@@ -320,15 +325,49 @@ fileserver_tick(fileserver* fileserver)
 	}
 
 	selectable_set_clear(&fileserver->selectable);
-	selectable_set_set_read(&fileserver->selectable, fileserver->server_socket);
+	selectable_set_set_read(&fileserver->selectable, fileserver->socket);
 
-	highest_handle = fileserver->server_socket + 1;
+	highest_handle = fileserver->socket + 1;
 	selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
 
-	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->server_socket))
+	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->socket))
 	{
-		accept_incoming_connections(selected, fileserver->server_socket, &fileserver->connection_storage, &fileserver->statistics);
+		accept_incoming_connections(selected, fileserver->socket, &fileserver->connection_storage, 
+                                    &fileserver->statistics);
 	}
+}
+
+fileserver
+fileserver_create()
+{
+    fileserver fileserver;
+    memset(&fileserver, 0, sizeof(fileserver));
+
+    timer_initialize(&fileserver.timer);
+
+    fileserver.selectable          = selectable_set_create();
+    fileserver.connection_storage  = create_connection_storage(MAX_CONNECTION_COUNT);
+    fileserver.receive_data_buffer = malloc(MAX_PACKET_SIZE * 24);
+
+    fileserver.socket = socket_create_tcp();
+    socket_set_nonblocking(fileserver.socket);
+
+    fileserver.address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
+    socket_bind(fileserver.socket, fileserver.address);
+
+    socket_address_to_string(&fileserver.address, fileserver.address_string, INET_STRADDR_LENGTH);
+
+    socket_listen(fileserver.socket);
+
+    return fileserver;
+}
+
+void
+fileserver_destroy(fileserver* fileserver)
+{
+    destroy_connection_storage(&fileserver->connection_storage);
+    free(fileserver->receive_data_buffer);
+    socket_close(fileserver->socket);
 }
 
 int 
@@ -338,66 +377,30 @@ main(int argc, char* argv[])
     UNUSED(argv);
 
     console_init();
-
-    timer timer;
-    timer_initialize(&timer);
+    socket_initialize();
 
     measure_time measure;
     measure_initialize(&measure);
 
-    connection_statistics statistics;
-    memset(&statistics, 0, sizeof(statistics));
-
     file_io io = file_io_initialize();
 
-    socket_initialize();
-
-    socket_handle server_socket = socket_create_tcp();
-    socket_set_nonblocking(server_socket);
-    
-    socket_address server_address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
-
-    socket_bind(server_socket, server_address);
-
-    char server_address_string[INET_STRADDR_LENGTH];
-    socket_address_to_string(&server_address, server_address_string, INET_STRADDR_LENGTH);
-
-    socket_listen(server_socket);
-
-    // selectable_set selectable = selectable_set_create();
-
-    connection_storage connection_storage = create_connection_storage(MAX_CONNECTION_COUNT);
-
-    char* receive_data_buffer = malloc(MAX_PACKET_SIZE);
-
-    double target_frame_delta = 1.0 / TARGET_UPS;
-
-    fileserver fileserver;
-    memset(&fileserver, 0, sizeof(fileserver));
+    fileserver fileserver = fileserver_create();
 
     int running = 1;
     while(running && !platform_quit)
     {
-#if 0 // TODO: Implement
 	    fileserver_tick(&fileserver);
-#endif
 
-        measure_tick(&measure);
+        wait_for_target_ups(&measure, 1.0 / TARGET_UPS);
 
-        wait_for_target_ups(&measure, target_frame_delta);
-
-	    timer_end_frame(&timer);
+	    timer_end_frame(&fileserver.timer);
     }
 
-    free(receive_data_buffer);
-
-    destroy_connection_storage(&connection_storage);
-
-    socket_close(server_socket);
-
-    socket_cleanup();
+    fileserver_destroy(&fileserver);
 
     file_io_destroy(&io);
+
+    socket_cleanup();
 
     printf("Server terminated gracefully.\n");
 }
