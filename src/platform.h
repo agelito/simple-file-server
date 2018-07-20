@@ -23,6 +23,9 @@
 extern char platform_path_delimiter;
 extern int platform_quit;
 
+typedef uint32_t socket_handle;
+typedef uint32_t file_handle;
+
 typedef struct timer {
     int64_t       performance_frequency;
     int64_t       performance_counter;
@@ -56,7 +59,21 @@ typedef struct file_mapping {
     
 } file_mapping;
 
-typedef uint32_t socket_handle;
+typedef struct mapped_file {
+    char*       file_path;
+    file_handle file;
+    file_handle mapping;
+    int         read_only;
+    int64_t     file_size;
+    int64_t     offset;
+} mapped_file;
+
+typedef struct mapped_file_view {
+    void*   base;
+    void*   mapped;
+    int64_t size_aligned;
+    int64_t size;
+} mapped_file_view;
 
 void panic(int exit_code);
 
@@ -116,13 +133,18 @@ int             selectable_set_select_noblock(selectable_set* set, int highest_h
 void exe_set_working_directory(char* directory_path);
 void exe_get_directory(char* output, int output_length);
 
-void filesystem_create_directory(char* directory_path);
-void filesystem_delete_directory(char* directory_path);
-int  filesystem_directory_exists(char* directory_path);
-int  filesystem_open_create_file(char* file_path);
-void filesystem_close_file(int file_handle);
-void filesystem_delete_file(char* file_path);
-int  filesystem_file_exists(char* file_path);
+void        filesystem_create_directory(char* directory_path);
+void        filesystem_delete_directory(char* directory_path);
+int         filesystem_directory_exists(char* directory_path);
+int         filesystem_open_create_file(char* file_path);
+int         filesystem_open_read_file(char* file_path);
+void        filesystem_close_file(int file_handle);
+void        filesystem_delete_file(char* file_path);
+int         filesystem_file_exists(char* file_path);
+mapped_file filesystem_create_mapped_file(char* file_path, int read_only, int64_t size);
+void        filesystem_destroy_mapped_file(mapped_file* mapped_file);
+mapped_file_view filesystem_file_view_map(mapped_file* mapped_file, int64_t size);
+void             filesystem_file_view_unmap(mapped_file_view* view);
 
 
 #endif // PLATFORM_H_INCLUDED

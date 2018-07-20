@@ -7,7 +7,7 @@
 #include "file_io.c"
 #include "connection.c"
 
-#define TARGET_UPS 1000
+#define TARGET_UPS 400
 
 typedef struct connection_statistics
 {
@@ -30,8 +30,6 @@ typedef struct fileserver
     float                 last_print_time;
     connection_statistics statistics;
 } fileserver;
-
-
 
 float
 print_server_info(fileserver* fileserver)
