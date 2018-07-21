@@ -226,7 +226,8 @@ void
 filesystem_file_view_unmap(mapped_file_view* view)
 {
     UnmapViewOfFile(view->base);
-    view->base   = 0;
-    view->mapped = 0;
-    view->size   = 0;
+    view->base		   = 0;
+    view->mapped	   = 0;
+    view->size		   = 0;
+    view->size_aligned = 0;
 }
