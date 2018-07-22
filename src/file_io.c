@@ -22,8 +22,7 @@ create_temporary_directory(char* output_path, int output_path_length)
 {
     UNUSED(output_path_length);
 
-    // TODO: Protect against buffer overrun.
-    sprintf(output_path, "tmp");
+    snprintf(output_path, output_path_length, "tmp");
 
     if(!filesystem_directory_exists(output_path))
     {
@@ -36,8 +35,7 @@ create_upload_directory(char* output_path, int output_path_length)
 {
     UNUSED(output_path_length);
 
-    // TODO: Protect against buffer overrun.
-    sprintf(output_path, "upload");
+    snprintf(output_path, output_path_length, "upload");
 
     if(!filesystem_directory_exists(output_path))
     {
@@ -87,8 +85,8 @@ generate_temporary_file_path(file_io* io, char* output_path, int output_path_len
 {
     UNUSED(output_path_length);
 
-    // TODO: Protect against buffer overrun.
-    sprintf(output_path, "%s%c%05d", io->temporary_directory, platform_path_delimiter, io->temporary_file_index++);
+    snprintf(output_path, output_path_length, "%s%c%05d", io->temporary_directory,
+             platform_path_delimiter, io->temporary_file_index++);
 }
 
 file_io_file
