@@ -110,10 +110,44 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 	connection->transfer.chunk_count = upload_begin->chunk_count;
 
     char* packet_file_name = (char*)(packet_body + sizeof(packet_file_upload_begin));
-    santitize_file_name(packet_file_name, upload_begin->file_name_length, connection->transfer.file_name_final, MAX_FILE_NAME);
+    santitize_file_name(packet_file_name, upload_begin->file_name_length,
+                        connection->transfer.file_name_final, MAX_FILE_NAME);
 
 	connection->transfer.received_bytes	 = 0;
 	connection->transfer.chunk_completed = 0;
+}
+
+void
+fileserver_upload_chunk(connection* connection, char* packet_body, int body_length)
+{
+	if(body_length < sizeof(packet_file_upload_chunk))
+	{
+		connection_protocol_error(connection);
+		return;
+	}
+	
+	if(!connection->transfer_in_progress)
+	{
+		connection_protocol_error(connection);
+		return;
+	}
+
+	packet_file_upload_chunk* upload_chunk = (packet_file_upload_chunk*)packet_body;
+
+	int packet_size_with_chunk = sizeof(packet_file_upload_chunk) + upload_chunk->chunk_size;
+	if(body_length != packet_size_with_chunk)
+	{
+        connection_protocol_error(connection);
+		return;
+	}
+
+	// TODO: Read packet chunk.
+}
+
+void
+fileserver_upload_final(connection* connection, char* packet_body, int body_length)
+{
+	// TODO: Implement upload final.
 }
 
 void 
@@ -130,8 +164,12 @@ fileserver_receive_packet_body(connection* connection, int packet_type, char* pa
     case PACKET_FILE_UPLOAD_BEGIN:
 	    fileserver_upload_begin(connection, packet_body, body_length);
         break;
-    case PACKET_FILE_UPLOAD_CHUNK: break;
-    case PACKET_FILE_UPLOAD_FINAL: break;
+    case PACKET_FILE_UPLOAD_CHUNK:
+	    fileserver_upload_chunk(connection, packet_body, body_length);
+	    break;
+    case PACKET_FILE_UPLOAD_FINAL:
+	    fileserver_upload_final(connection, packet_body, body_length);
+	    break;
     default: 
         connection_protocol_error(connection);
         break;
@@ -216,8 +254,12 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 			continue;
 		}
 
-		selectable_set_set_read(selectable, connection->socket);
-        
+		if(!connection->pending_disconnect)
+		{
+			selectable_set_set_read(selectable, connection->socket);
+		}
+
+		// NOTE: Keep sending data even if connection is pending disconnect.
         if(connection->send_bytes > 0)
         {
             selectable_set_set_write(selectable, connection->socket);
