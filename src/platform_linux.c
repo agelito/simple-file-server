@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <time.h>
 #include <ftw.h>
+#include <stdarg.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
