@@ -147,15 +147,14 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
 void
 fileserver_upload_final(connection* connection, char* packet_body, int body_length)
 {
-	// TODO: Implement upload final.
+    UNUSED(connection);
+    UNUSED(packet_body);
+    UNUSED(body_length);
 }
 
 void 
 fileserver_receive_packet_body(connection* connection, int packet_type, char* packet_body, int body_length)
 {
-    UNUSED(packet_body);
-    UNUSED(body_length);
-
     switch(packet_type)
     {
     case PACKET_DISCONNECT: 

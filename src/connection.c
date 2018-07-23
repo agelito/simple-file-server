@@ -2,12 +2,12 @@
 
 typedef struct connection_file_transfer
 {
-	int	 file_size;
-	int	 received_bytes;
-	int	 chunk_count;
-	int	 chunk_completed;
-	char file_name_final[MAX_FILE_NAME];
-    file_io_file download;
+	int         file_size;
+	int         received_bytes;
+	int         chunk_count;
+	int         chunk_completed;
+	char        file_name_final[MAX_FILE_NAME];
+    mapped_file download_file;
 } connection_file_transfer;
 
 typedef struct connection

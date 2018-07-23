@@ -133,6 +133,8 @@ int             selectable_set_select_noblock(selectable_set* set, int highest_h
 void exe_set_working_directory(char* directory_path);
 void exe_get_directory(char* output, int output_length);
 
+long platform_format(char* destination, long size, char* format, ...);
+
 void        filesystem_create_directory(char* directory_path);
 void        filesystem_delete_directory(char* directory_path);
 int         filesystem_directory_exists(char* directory_path);

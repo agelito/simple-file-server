@@ -4,7 +4,7 @@
 
 typedef struct file_io 
 {
-    int temporary_file_index;
+    int   temporary_file_index;
     char* temporary_directory;
     char* upload_directory;
 } file_io;
@@ -20,9 +20,7 @@ typedef struct file_io_file
 void
 create_temporary_directory(char* output_path, int output_path_length)
 {
-    UNUSED(output_path_length);
-
-    snprintf(output_path, output_path_length, "tmp");
+    platform_format(output_path, output_path_length, "tmp");
 
     if(!filesystem_directory_exists(output_path))
     {
@@ -33,9 +31,7 @@ create_temporary_directory(char* output_path, int output_path_length)
 void
 create_upload_directory(char* output_path, int output_path_length)
 {
-    UNUSED(output_path_length);
-
-    snprintf(output_path, output_path_length, "upload");
+    platform_format(output_path, output_path_length, "upload");
 
     if(!filesystem_directory_exists(output_path))
     {
@@ -83,10 +79,8 @@ file_io_destroy(file_io* io)
 void
 generate_temporary_file_path(file_io* io, char* output_path, int output_path_length)
 {
-    UNUSED(output_path_length);
-
-    snprintf(output_path, output_path_length, "%s%c%05d", io->temporary_directory,
-             platform_path_delimiter, io->temporary_file_index++);
+    platform_format(output_path, output_path_length, "%s%c%05d", io->temporary_directory,
+                    platform_path_delimiter, io->temporary_file_index++);
 }
 
 file_io_file
@@ -97,7 +91,7 @@ file_io_create_file(char* path)
     file.bytes_written = 0;
     file.bytes_read = 0;
 
-    sprintf(file.file_name, "%s", path);
+    platform_format(file.file_name, MAX_FILE_NAME, "%s", path);
 
     file.os_file_handle = filesystem_open_create_file(path);
 

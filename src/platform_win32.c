@@ -14,6 +14,17 @@
 int platform_quit = 0;
 char platform_path_delimiter = '\\';
 
+long
+platform_format(char* destination, long size, char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    int result = vsnprintf(destination, size, format, args);
+    va_end(args);
+
+    return (long)result;
+}
+
 void
 thread_sleep(int milliseconds)
 {
@@ -197,6 +208,11 @@ filesystem_file_view_map(mapped_file* mapped_file, int64_t size)
     
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
+
+    if(size > mapped_file->file_size - mapped_file->offset)
+    {
+        size = mapped_file->file_size - mapped_file->offset;
+    }
 
     int64_t aligned_offset = (mapped_file->offset & ~(system_info.dwAllocationGranularity - 1));
 

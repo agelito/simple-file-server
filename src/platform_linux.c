@@ -31,6 +31,17 @@
 int platform_quit = 0;
 char platform_path_delimiter = '/';
 
+long
+platform_format(char* destination, long size, char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    int result = vsnprintf(destination, size, format, args);
+    va_end(args);
+
+    return (long)result;
+}
+
 void
 thread_sleep(int milliseconds)
 {
