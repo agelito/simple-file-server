@@ -162,7 +162,17 @@ int
 socket_recv(socket_handle socket, char* recv_buffer, int recv_length)
 {
 	int recv_result = recv(socket, recv_buffer, recv_length, 0);
-	if(recv_result == -1) SOCKET_CHECK_ERROR();
+	if(recv_result == -1)
+	{
+		SOCKET_CHECK_ERROR();
+	}
+	else if(recv_result == 0)
+	{
+		// NOTE: Linux sockets return 0 if the socket was orderly shutdown. Non-blocking sockets
+		// would return -1 and error would indicate that socket is waiting for data.
+		recv_result = -1;
+	}
+	
 	return recv_result;
 }
 
