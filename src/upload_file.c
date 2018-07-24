@@ -58,6 +58,8 @@ upload_file(connection* connection, mapped_file* file)
 	        printf("sending network data: %d\n", connection->send_data_count);
 	        connection_send_network_data(connection);
         }
+
+        thread_sleep(200);
     }
 }
 

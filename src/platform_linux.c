@@ -3,6 +3,7 @@
 #define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200112L
 #define _XOPEN_SOURCE 500
+#define _GNU_SOURCE
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -13,6 +14,7 @@
 #include <time.h>
 #include <ftw.h>
 #include <stdarg.h>
+#include <fcntl.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -158,6 +160,8 @@ filesystem_create_mapped_file(char* file_path, int read_only, int64_t size)
     else
     {
 	    file_size = size;
+
+	    fallocate(file, 0, 0, (off_t)size);
     }
 
     mapped.mapping	 = 0;

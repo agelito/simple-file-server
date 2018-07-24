@@ -99,14 +99,12 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 {
 	if(body_length < sizeof(packet_file_upload_begin))
 	{
-		printf("packet body too small.\n");
         connection_protocol_error(connection);
 		return;
 	}
 	
 	if(connection->transfer_in_progress)
 	{
-		printf("transfer already in progress.\n");
         connection_protocol_error(connection);
 		return;
 	}
@@ -116,7 +114,6 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 	int packet_size_with_filename = sizeof(packet_file_upload_begin) + upload_begin->file_name_length;
 	if(body_length != packet_size_with_filename)
 	{
-		printf("packet size not matching file name.\n");
         connection_protocol_error(connection);
 		return;
 	}
@@ -130,9 +127,6 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 
 	connection->transfer_in_progress = 1;
     connection->transfer_completed   = 0;
-
-    printf("prepared file transfer of file: %s (%ld).\n", connection->transfer.file_name_final,
-	    connection->transfer.file_size);
 }
 
 void
@@ -140,14 +134,12 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
 {
 	if(body_length < sizeof(packet_file_upload_chunk))
 	{
-		printf("body length too small for chunk packet.\n");
 		connection_protocol_error(connection);
 		return;
 	}
 	
 	if(!connection->transfer_in_progress)
 	{
-		printf("transfer is not started.\n");
 		connection_protocol_error(connection);
 		return;
 	}
@@ -157,7 +149,6 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
 	int packet_size_with_chunk = sizeof(packet_file_upload_chunk) + upload_chunk->chunk_size;
 	if(body_length != packet_size_with_chunk)
 	{
-		printf("chunk body length mismatch %d != %d\n", body_length, packet_size_with_chunk);
         connection_protocol_error(connection);
 		return;
 	}
@@ -168,8 +159,6 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
                               connection->transfer.io_buffer_size);
     if(upload_chunk->chunk_size < remaining_io_bytes)
     {
-	    printf("received chunk: %d\n", upload_chunk->chunk_size);
-	    
         memcpy(connection->transfer.io_buffer + connection->transfer.io_buffer_size,
                chunk_data, upload_chunk->chunk_size);
         connection->transfer.io_buffer_size	 += upload_chunk->chunk_size;
@@ -199,7 +188,7 @@ fileserver_upload_final(connection* connection, char* packet_body, int body_leng
 	    connection_protocol_error(connection);
 	    return;
     }
-    
+
     connection->transfer_completed = 1;
 }
 
@@ -248,8 +237,6 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 	    }
 	    
 	    packet_header* header = (packet_header*)read_data;
-	    printf("packet: type 0x%x, length %d\n", header->packet_type, header->packet_size);
-        
         if(header->packet_type == PACKET_INVALID_PROTOCOL)
         {
 	        connection->pending_disconnect = 1;
