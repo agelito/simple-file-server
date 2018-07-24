@@ -6,6 +6,7 @@ cl /DUNICODE /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /EHsc- 
 cl /DUNICODE /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /EHsc- /fp:fast /GS- /MP8 /O2 /W4 /WX /MT /Foobj\ /Fmbin\ /Febin\fileserver.exe src\fileserver.c src\platform_win32.c
 cl /DUNICODE /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /EHsc- /fp:fast /GS- /MP8 /O2 /W4 /WX /MT /Foobj\ /Fmbin\ /Febin\stress_test.exe src\stress_test.c src\platform_win32.c
 cl /DUNICODE /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /EHsc- /fp:fast /GS- /MP8 /O2 /W4 /WX /MT /Foobj\ /Fmbin\ /Febin\map_file_test.exe src\map_file_test.c src\platform_win32.c
+cl /DUNICODE /D_CRT_SECURE_NO_WARNINGS /D_WINSOCK_DEPRECATED_NO_WARNINGS /EHsc- /fp:fast /GS- /MP8 /O2 /W4 /WX /MT /Foobj\ /Fmbin\ /Febin\upload_file.exe src\upload_file.c src\platform_win32.c
 
 set /p COMPILE_START=<cs.time
 tools\ctime.exe %COMPILE_START% > ce.time

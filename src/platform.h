@@ -54,11 +54,6 @@ typedef struct selectable_set {
 	void* write;
 } selectable_set;
 
-typedef struct file_mapping {
-    char* file_path;
-    
-} file_mapping;
-
 typedef struct mapped_file {
     char*       file_path;
     file_handle file;

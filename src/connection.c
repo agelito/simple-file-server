@@ -3,10 +3,13 @@
 typedef struct connection_file_transfer
 {
 	int         file_size;
-	int         received_bytes;
+    int         bytes_done;
 	int         chunk_count;
 	int         chunk_completed;
 	char        file_name_final[MAX_FILE_NAME];
+    int         io_buffer_size;
+    int         io_buffer_capacity;
+    char*       io_buffer;
     mapped_file download_file;
 } connection_file_transfer;
 
@@ -19,14 +22,15 @@ typedef struct connection
     int						 pending_disconnect;
     int						 send_bytes;
     char*					 send_data;
+    int                      transfer_completed;
 	int						 transfer_in_progress;
 	connection_file_transfer transfer;
 } connection;
 
 typedef struct connection_storage
 {
-    int count;
-    int capacity;
+    int         count;
+    int         capacity;
     connection* connections;
 } connection_storage;
 
@@ -115,6 +119,27 @@ connection_disconnect(connection* connection)
     }
 }
 
+void
+connection_transfer_free(connection_file_transfer* transfer)
+{
+    if(transfer->io_buffer)
+    {
+        free(transfer->io_buffer);
+        transfer->io_buffer          = 0;
+        transfer->io_buffer_size     = 0;
+        transfer->io_buffer_capacity = 0;
+    }
+
+    if(transfer->download_file.file_path)
+    {
+        char file_path[MAX_FILE_NAME];
+        strcpy(file_path, transfer->download_file.file_path);
+
+        filesystem_destroy_mapped_file(&transfer->download_file);
+        filesystem_delete_file(file_path);
+    }
+}
+
 void 
 remove_connection_index(connection_storage* connection_storage, int index)
 {
@@ -124,6 +149,10 @@ remove_connection_index(connection_storage* connection_storage, int index)
         socket_close(connection_at_index->socket);
         connection_at_index->socket = 0;
     }
+
+    connection_transfer_free(&connection_at_index->transfer);
+
+    connection_at_index->transfer_in_progress = 0;
 
     connection_at_index->send_bytes = 0;
 
@@ -156,6 +185,46 @@ connection_push_packet(connection* connection, char packet_type, char* packet_da
         if(packet_length > 0)
         {
             memcpy(send_data, packet_data, packet_length);
+        }
+
+        connection->send_bytes += full_packet_length;
+
+        return 1;
+    }
+
+    return 0;
+}
+
+int
+connection_push_data_packet(connection* connection, char packet_type, char* packet, 
+                            short packet_length, char* data, short data_length)
+{
+    char* send_data = connection->send_data;
+    short full_packet_length = sizeof(packet_header) + packet_length + data_length;
+    int remaining_bytes = MAX_PACKET_SIZE - connection->send_bytes;
+
+    if(full_packet_length < remaining_bytes)
+    {
+        // TODO: Don't include header size in packet_size field. Then the receiver
+        // will be responsible for getting the correct header and packet data from
+        // the TCP stream.
+
+        packet_header* header = (packet_header*)(send_data + connection->send_bytes);
+        header->packet_type = packet_type;
+        header->packet_size = full_packet_length;
+
+        send_data += sizeof(packet_header);
+
+        if(packet_length > 0)
+        {
+            memcpy(send_data, packet, packet_length);
+        }
+
+        send_data += packet_length;
+
+        if(data_length > 0)
+        {
+            memcpy(send_data, data, data_length);
         }
 
         connection->send_bytes += full_packet_length;
@@ -214,5 +283,20 @@ connection_recv_network_data(connection* connection, char* io_buffer, int io_buf
     }
 
     return recv_result;
+}
+
+void
+connection_transfer_prepare(connection_file_transfer* transfer, int size, int chunk_count)
+{
+	transfer->file_size       = size;
+    transfer->bytes_done      = 0;
+	transfer->chunk_count     = chunk_count;
+    transfer->chunk_completed = 0;
+
+    transfer->io_buffer_size     = 0;
+    transfer->io_buffer_capacity = MAX_PACKET_SIZE * 4;
+    transfer->io_buffer          = malloc(MAX_PACKET_SIZE * 4);
+
+    memset(&transfer->download_file, 0, sizeof(mapped_file));
 }
 

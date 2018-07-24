@@ -9,14 +9,6 @@ typedef struct file_io
     char* upload_directory;
 } file_io;
 
-typedef struct file_io_file 
-{
-    int  os_file_handle;
-    int  bytes_written;
-    int  bytes_read;
-    char file_name[MAX_FILE_NAME];
-} file_io_file;
-
 void
 create_temporary_directory(char* output_path, int output_path_length)
 {
@@ -77,36 +69,15 @@ file_io_destroy(file_io* io)
 }
 
 void
+create_upload_file_path(file_io* io, char* file_name, char* output_path, int output_path_length)
+{
+    platform_format(output_path, output_path_length, "%s%c%s", io->upload_directory,
+                    platform_path_delimiter, file_name);
+}
+
+void
 generate_temporary_file_path(file_io* io, char* output_path, int output_path_length)
 {
     platform_format(output_path, output_path_length, "%s%c%05d", io->temporary_directory,
                     platform_path_delimiter, io->temporary_file_index++);
-}
-
-file_io_file
-file_io_create_file(char* path)
-{
-    file_io_file file;
-
-    file.bytes_written = 0;
-    file.bytes_read = 0;
-
-    platform_format(file.file_name, MAX_FILE_NAME, "%s", path);
-
-    file.os_file_handle = filesystem_open_create_file(path);
-
-    return file;
-}
-
-void
-file_io_destroy_file(file_io_file* file)
-{
-    if(file->os_file_handle)
-    {
-        filesystem_close_file(file->os_file_handle);
-        file->os_file_handle = 0;
-    }
-
-    file->bytes_written = 0;
-    file->bytes_read = 0;
 }
