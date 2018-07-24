@@ -87,12 +87,14 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 {
 	if(body_length < sizeof(packet_file_upload_begin))
 	{
+		printf("packet body too small.\n");
         connection_protocol_error(connection);
 		return;
 	}
 	
 	if(connection->transfer_in_progress)
 	{
+		printf("transfer already in progress.\n");
         connection_protocol_error(connection);
 		return;
 	}
@@ -102,18 +104,23 @@ fileserver_upload_begin(connection* connection, char* packet_body, int body_leng
 	int packet_size_with_filename = sizeof(packet_file_upload_begin) + upload_begin->file_name_length;
 	if(body_length != packet_size_with_filename)
 	{
+		printf("packet size not matching file name.\n");
         connection_protocol_error(connection);
 		return;
 	}
 
-    connection_transfer_prepare(&connection->transfer, upload_begin->file_size, upload_begin->chunk_count);
+    connection_transfer_prepare(&connection->transfer, upload_begin->file_size);
 
     char* packet_file_name = (char*)(packet_body + sizeof(packet_file_upload_begin));
-    santitize_file_name(packet_file_name, upload_begin->file_name_length,
+    
+    sanitize_file_name(packet_file_name, upload_begin->file_name_length,
                         connection->transfer.file_name_final, MAX_FILE_NAME);
 
 	connection->transfer_in_progress = 1;
     connection->transfer_completed   = 0;
+
+    printf("prepared file transfer of file: %s (%ld).\n", connection->transfer.file_name_final,
+	    connection->transfer.file_size);
 }
 
 void
@@ -121,12 +128,14 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
 {
 	if(body_length < sizeof(packet_file_upload_chunk))
 	{
+		printf("body length too small for chunk packet.\n");
 		connection_protocol_error(connection);
 		return;
 	}
 	
 	if(!connection->transfer_in_progress)
 	{
+		printf("transfer is not started.\n");
 		connection_protocol_error(connection);
 		return;
 	}
@@ -136,6 +145,7 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
 	int packet_size_with_chunk = sizeof(packet_file_upload_chunk) + upload_chunk->chunk_size;
 	if(body_length != packet_size_with_chunk)
 	{
+		printf("chunk body length mismatch %d != %d\n", body_length, packet_size_with_chunk);
         connection_protocol_error(connection);
 		return;
 	}
@@ -146,10 +156,12 @@ fileserver_upload_chunk(connection* connection, char* packet_body, int body_leng
                               connection->transfer.io_buffer_size);
     if(upload_chunk->chunk_size < remaining_io_bytes)
     {
-        memcpy(connection->transfer.io_buffer + connection->transfer.io_buffer_size, chunk_data, upload_chunk->chunk_size);
-        connection->transfer.io_buffer_size += upload_chunk->chunk_size;
-
-        connection->transfer.chunk_completed++;
+	    printf("received chunk: %d\n", upload_chunk->chunk_size);
+	    
+        memcpy(connection->transfer.io_buffer + connection->transfer.io_buffer_size,
+               chunk_data, upload_chunk->chunk_size);
+        connection->transfer.io_buffer_size	 += upload_chunk->chunk_size;
+        connection->transfer.byte_count_recv += upload_chunk->chunk_size;
     }
 }
 
@@ -170,10 +182,10 @@ fileserver_upload_final(connection* connection, char* packet_body, int body_leng
 		return;
     }
 
-    if(connection->transfer.chunk_count != connection->transfer.chunk_completed)
+    if(connection->transfer.file_size != connection->transfer.byte_count_recv)
     {
-        connection_protocol_error(connection);
-		return;
+	    connection_protocol_error(connection);
+	    return;
     }
     
     connection->transfer_completed = 1;
@@ -208,19 +220,39 @@ fileserver_receive_packets(connection* connection, char* data, int length)
     int remaining_bytes = length;
     while(remaining_bytes > 0 && !connection->pending_disconnect)
     {
+	    // TODO: Connection need buffer to store incoming packet data. Now
+	    // incomplete packets wont be delivered.
+	    
+	    int header_length = sizeof(packet_header);
+	    if(header_length > remaining_bytes)
+	    {
+		    break;
+	    }
+	    
         packet_header* header = (packet_header*)data;
-        if(header->packet_size > remaining_bytes || header->packet_type == PACKET_INVALID_PROTOCOL)
+        if(header->packet_type == PACKET_INVALID_PROTOCOL)
         {
-            connection->pending_disconnect = 1;
-            break;
+	        connection->pending_disconnect = 1;
+	        break;
         }
 
-        char* packet_data_body = (char*)header + sizeof(packet_header);
-        fileserver_receive_packet_body(connection, header->packet_type, packet_data_body,
-                                       header->packet_size - sizeof(packet_header));
+        remaining_bytes = (remaining_bytes - header_length);
 
-        data = (data + header->packet_size);
-        remaining_bytes -= header->packet_size;
+        int packet_length = header->packet_size;
+        if(packet_length > remaining_bytes)
+        {
+	        break;
+        }
+
+        printf("packet: type 0x%x, length %d\n", header->packet_type, header->packet_size);
+
+        char* packet_data_body = (char*)header + header_length;
+        fileserver_receive_packet_body(connection, header->packet_type,
+                                       packet_data_body, packet_length);
+
+        data = (packet_data_body + packet_length);
+
+        remaining_bytes = (remaining_bytes - packet_length);
     }
 }
 
@@ -268,7 +300,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 	{
 		connection* connection = (connection_storage->connections + connection_index);
 
-		if(connection->pending_disconnect && connection->send_bytes == 0)
+		if(connection->pending_disconnect && connection->send_data_count == 0)
 		{
 			connection_disconnect(connection);
 			statistics->disconnections += 1;
@@ -286,7 +318,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 		}
 
 		// NOTE: Keep sending data even if connection is pending disconnect.
-        if(connection->send_bytes > 0)
+        if(connection->send_data_count > 0)
         {
             selectable_set_set_write(selectable, connection->socket);
         }
@@ -388,20 +420,20 @@ fileserver_write_downloaded_data(file_io* io, connection* connection)
 
     if(transfer->download_file.file && transfer->io_buffer_size > 0)
     {
-        transfer->download_file.offset = transfer->bytes_done;
+        transfer->download_file.offset = transfer->byte_count_disk;
 
         mapped_file_view view = filesystem_file_view_map(&transfer->download_file, transfer->io_buffer_size);
         memcpy(view.mapped, transfer->io_buffer, transfer->io_buffer_size);
         filesystem_file_view_unmap(&view);
 
-        transfer->bytes_done += transfer->io_buffer_size;
+        transfer->byte_count_disk += transfer->io_buffer_size;
 
         transfer->io_buffer_size = 0;
     }
 
     if(connection->transfer_completed)
     {
-        if(transfer->file_size == transfer->bytes_done)
+        if(transfer->byte_count_disk == transfer->file_size)
         {
             fileserver_write_final_file(io, transfer);
         }

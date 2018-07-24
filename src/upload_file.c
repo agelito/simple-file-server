@@ -4,33 +4,22 @@
 #include "protocol.h"
 
 #include "connection.c"
+#include "string_sanitize.c"
 
 void
 upload_file(connection* connection, mapped_file* file)
 {
     int chunk_size  = 2048;
-    int chunk_count = (int)(file->file_size / chunk_size);
-
-    if(file->file_size % chunk_size != 0)
-    {
-        chunk_count += 1;
-    }
-
-    printf("file chunks: %d\n", chunk_count);
 
     packet_file_upload_begin upload_begin;
-    upload_begin.file_size        = (int)file->file_size;
-    upload_begin.chunk_count      = chunk_count;
+    upload_begin.file_size        = file->file_size;
     upload_begin.file_name_length = (int)strlen(file->file_path);
 
-    printf("upload_begin.file_size: %d\n", upload_begin.file_size);
-    printf("upload_begin.chunk_count: %d\n", upload_begin.chunk_count);
-    printf("upload_begin.file_name_length: %d\n", upload_begin.file_name_length);
+    connection_push_data_packet(connection, PACKET_FILE_UPLOAD_BEGIN, (char*)&upload_begin,
+                                sizeof(upload_begin), file->file_path,
+                                (short)upload_begin.file_name_length);
 
-    connection_push_data_packet(connection, PACKET_FILE_UPLOAD_BEGIN, (char*)&upload_begin, sizeof(upload_begin), 
-                                file->file_path, (short)upload_begin.file_name_length);
-
-    int sent_bytes = 0;
+    int64_t sent_bytes = 0;
 
     int upload_in_progress = 1;
     while(upload_in_progress)
@@ -38,7 +27,7 @@ upload_file(connection* connection, mapped_file* file)
         if(sent_bytes < file->file_size)
         {
             int send_chunk_size = chunk_size;
-            int remaining_bytes = (int)(file->file_size - sent_bytes);
+            int64_t remaining_bytes = (file->file_size - sent_bytes);
             if(send_chunk_size > remaining_bytes)
             {
                 send_chunk_size = remaining_bytes;
@@ -46,25 +35,29 @@ upload_file(connection* connection, mapped_file* file)
             packet_file_upload_chunk upload_chunk;
             upload_chunk.chunk_size = send_chunk_size;
 
-
             file->offset = sent_bytes;
             mapped_file_view view = filesystem_file_view_map(file, send_chunk_size);
 
-            connection_push_data_packet(connection, PACKET_FILE_UPLOAD_CHUNK, (char*)&upload_chunk, sizeof(upload_chunk),
-                                        view.mapped, (short)send_chunk_size);
+            connection_push_data_packet(connection, PACKET_FILE_UPLOAD_CHUNK, (char*)&upload_chunk,
+                                        sizeof(upload_chunk), view.mapped, (short)send_chunk_size);
 
             sent_bytes += send_chunk_size;
 
             filesystem_file_view_unmap(&view);
+
+            printf("sent %ld / %ld\n", sent_bytes, file->file_size);
         }
         else
         {
+	        printf("finished sending\n");
+	        
             connection_push_empty_packet(connection, PACKET_FILE_UPLOAD_FINAL);
             upload_in_progress = 0;
         }
 
-        if(connection->send_bytes > 0)
+        if(connection->send_data_count > 0)
         {
+	        printf("sending network data: %d\n", connection->send_data_count);
             connection_send_network_data(connection);
         }
     }

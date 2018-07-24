@@ -27,10 +27,8 @@ typedef struct packet_header
 
 typedef struct packet_file_upload_begin
 {
-	int file_size;
-	int file_name_length;
-	int chunk_count;
-	
+	int64_t file_size;
+	int		file_name_length;
 } packet_file_upload_begin;
 
 typedef struct packet_file_upload_chunk

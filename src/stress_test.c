@@ -57,9 +57,13 @@ create_connections(int count, int iterations)
         for(i = 0; i < connections.count; ++i)
         {
             connection* connection = (connections.connections + i);
-            if(connection->send_bytes > 0)
+            if(connection->send_data_count > 0)
             {
-                sent_bytes += connection_send_network_data(connection);
+	            int sent = connection_send_network_data(connection);
+	            if(sent > 0)
+	            {
+		            sent_bytes += sent;
+	            }
             }
         }
 

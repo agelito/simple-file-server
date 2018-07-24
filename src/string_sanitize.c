@@ -38,7 +38,7 @@ sanitize_character(char input)
 }
 
 void
-santitize_file_name(char* input, int input_length, char* output, int output_length)
+sanitize_file_name(char* input, int input_length, char* output, int output_length)
 {
     if(input_length >= output_length)
         input_length = output_length - 1;
