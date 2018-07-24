@@ -83,8 +83,33 @@ print_server_info(fileserver* fileserver)
 	        if(connection->transfer_in_progress)
 	        {
 		        connection_file_transfer* transfer = &connection->transfer;
-		        printf("%-20s: %-20s %ld bytes\n", "Transfer", transfer->file_name_final,
-			        transfer->file_size);
+
+
+		        float transfer_percent = (float)connection->transfer.byte_count_recv /
+		                                        connection->transfer.file_size;
+
+		        printf("%-20s: %ld / %ld (%0.02f%%)", "Transfer",
+		               transfer->byte_count_recv, transfer->file_size,
+		               transfer_percent * 100.0f);
+
+		        printf("|");
+		        
+		        int c;
+		        for(c = 0; c < 40; ++c)
+		        {
+			        char character = '-';
+			        float progress = (float)c / 40.0f;
+			        if(progress < transfer_percent)
+			        {
+				        character = '=';
+			        }
+
+			        printf("%c", character);
+		        }
+
+		        printf("|");
+
+		        printf("\n");
 	        }
         }
 
