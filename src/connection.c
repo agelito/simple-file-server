@@ -178,7 +178,7 @@ connection_push_packet(connection* connection, char packet_type, char* packet_da
     int remaining_bytes = (connection->send_data_capacity - connection->send_data_count);
     if(full_length < remaining_bytes)
     {
-        packet_header* header = (packet_header*)(send_data + connection->send_data_count);
+        packet_header* header = (packet_header*)send_data;
         header->packet_type = packet_type;
         header->packet_size = packet_length;
 
@@ -210,7 +210,7 @@ connection_push_data_packet(connection* connection, char packet_type, char* pack
 
     if(full_length < remaining_bytes)
     {
-        packet_header* header = (packet_header*)(send_data + connection->send_data_count);
+        packet_header* header = (packet_header*)send_data;
         header->packet_type = packet_type;
         header->packet_size = packet_and_data_length;
 
@@ -267,7 +267,7 @@ connection_send_network_data(connection* connection)
             socket_send(connection->socket, connection->send_data + sent_bytes, send_size);
         // TODO: Handle send errors better. Only disconnect if actual error occurred, or
         // if the remote was disconnected.
-        
+
         if(send_result > 0)
         {
             sent_bytes += send_result;

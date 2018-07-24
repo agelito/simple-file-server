@@ -9,7 +9,7 @@
 void
 upload_file(connection* connection, mapped_file* file)
 {
-    int chunk_size  = 2048;
+    int chunk_size  = 1024;
 
     packet_file_upload_begin upload_begin;
     upload_begin.file_size        = file->file_size;
@@ -44,8 +44,6 @@ upload_file(connection* connection, mapped_file* file)
             sent_bytes += send_chunk_size;
 
             filesystem_file_view_unmap(&view);
-
-            printf("sent %ld / %ld\n", sent_bytes, file->file_size);
         }
         else
         {
@@ -58,7 +56,7 @@ upload_file(connection* connection, mapped_file* file)
         if(connection->send_data_count > 0)
         {
 	        printf("sending network data: %d\n", connection->send_data_count);
-            connection_send_network_data(connection);
+	        connection_send_network_data(connection);
         }
     }
 }

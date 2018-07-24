@@ -76,6 +76,18 @@ print_server_info(fileserver* fileserver)
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
 
+        int i;
+        for(i = 0; i < connection_storage->count; ++i)
+        {
+	        connection* connection = (connection_storage->connections + i);
+	        if(connection->transfer_in_progress)
+	        {
+		        connection_file_transfer* transfer = &connection->transfer;
+		        printf("%-20s: %-20s %ld bytes\n", "Transfer", transfer->file_name_final,
+			        transfer->file_size);
+	        }
+        }
+
         last_print_time = (float)timer->elapsed_seconds;
     }
 
@@ -217,9 +229,15 @@ fileserver_receive_packet_body(connection* connection, int packet_type, char* pa
 void
 fileserver_receive_packets(connection* connection, char* data, int length)
 {
-    int remaining_bytes = length;
-    while(remaining_bytes > 0 && !connection->pending_disconnect)
+
+	
+	int read_bytes = 0;
+    while(read_bytes < length && !connection->pending_disconnect)
     {
+	    char* read_data = data + read_bytes;
+	    
+	    int remaining_bytes = (length - read_bytes);
+	    
 	    // TODO: Connection need buffer to store incoming packet data. Now
 	    // incomplete packets wont be delivered.
 	    
@@ -229,14 +247,19 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 		    break;
 	    }
 	    
-        packet_header* header = (packet_header*)data;
+	    packet_header* header = (packet_header*)read_data;
+	    printf("packet: type 0x%x, length %d\n", header->packet_type, header->packet_size);
+        
         if(header->packet_type == PACKET_INVALID_PROTOCOL)
         {
 	        connection->pending_disconnect = 1;
 	        break;
         }
 
-        remaining_bytes = (remaining_bytes - header_length);
+        read_bytes += header_length;
+
+
+        remaining_bytes = (length - read_bytes);
 
         int packet_length = header->packet_size;
         if(packet_length > remaining_bytes)
@@ -244,15 +267,11 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 	        break;
         }
 
-        printf("packet: type 0x%x, length %d\n", header->packet_type, header->packet_size);
-
-        char* packet_data_body = (char*)header + header_length;
+        char* packet_data_body = read_data + header_length;
         fileserver_receive_packet_body(connection, header->packet_type,
                                        packet_data_body, packet_length);
 
-        data = (packet_data_body + packet_length);
-
-        remaining_bytes = (remaining_bytes - packet_length);
+        read_bytes += packet_length;
     }
 }
 
