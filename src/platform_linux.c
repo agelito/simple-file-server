@@ -61,6 +61,20 @@ void
 exe_get_directory(char* output, int output_length)
 {
 	readlink("/proc/self/exe", output, output_length);
+
+	int length = strlen(output);
+	int last_character_index = length - 1;
+    while(last_character_index > 0)
+    {
+        char character = *(output + last_character_index);
+        if(character == '/') 
+        {
+            *(output + last_character_index) = 0;
+            break;
+        }
+
+        --last_character_index;
+    }
 }
 
 void
