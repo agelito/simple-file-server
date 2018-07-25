@@ -101,6 +101,9 @@ file_io_copy_file(mapped_file* source, char* destination, int64_t file_size)
             copy_bytes = (int)remaining_bytes;
         }
 
+        source->offset          = bytes_copied;
+        destination_file.offset = bytes_copied;
+
         mapped_file_view sview = filesystem_file_view_map(source, copy_bytes);
         mapped_file_view dview = filesystem_file_view_map(&destination_file, copy_bytes);
         // TODO: Check for errors mapping views.
