@@ -1,6 +1,6 @@
 // map_file_test.c
 
-#include "platform.h"
+#include "platform/platform.h"
 
 void
 map_view_of_file(mapped_file* file, int64_t offset, int64_t size)

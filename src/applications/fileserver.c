@@ -1,13 +1,13 @@
 // fileserver.c
 
-#include "platform.h"
+#include "platform/platform.h"
 #include "protocol.h"
 
 #include "string_sanitize.c"
 #include "file_io.c"
 #include "connection.c"
 
-#define TARGET_UPS 400
+#define TARGET_UPS 100
 
 typedef struct connection_statistics
 {

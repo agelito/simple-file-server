@@ -1,6 +1,6 @@
 // stress_test.c
 
-#include "platform.h"
+#include "platform/platform.h"
 #include "protocol.h"
 
 #include "file_io.c"

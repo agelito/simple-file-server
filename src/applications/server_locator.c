@@ -1,6 +1,6 @@
 // server_locator.c
 
-#include "platform.h"
+#include "platform/platform.h"
 #include "protocol.h"
 
 #define RECEIVE_BUFFER_LENGTH 4096
