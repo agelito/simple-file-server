@@ -243,8 +243,6 @@ fileserver_receive_packet_body(connection* connection, int packet_type, char* pa
 void
 fileserver_receive_packets(connection* connection, char* data, int length)
 {
-
-	
 	int read_bytes = 0;
     while(read_bytes < length && !connection->pending_disconnect)
     {
@@ -406,34 +404,7 @@ fileserver_write_final_file(file_io* io, connection_file_transfer* transfer)
     char upload_path[MAX_FILE_NAME];
     create_upload_file_path(io, transfer->file_name_final, upload_path, MAX_FILE_NAME);
 
-    mapped_file final_file = filesystem_create_mapped_file(upload_path, 0, transfer->file_size);
-
-    int bytes_copied = 0;
-    
-    while(bytes_copied < transfer->file_size)
-    {
-        int copy_bytes = 4096;
-        if(copy_bytes > (transfer->file_size - bytes_copied))
-        {
-            copy_bytes = (int)(transfer->file_size - bytes_copied);
-        }
-
-        transfer->download_file.offset = bytes_copied;
-        final_file.offset              = bytes_copied;
-
-        mapped_file_view source      = filesystem_file_view_map(&transfer->download_file, copy_bytes);
-        mapped_file_view destination = filesystem_file_view_map(&final_file, copy_bytes);
-
-        memcpy(destination.mapped, source.mapped, copy_bytes);
-
-        filesystem_file_view_unmap(&source);
-        filesystem_file_view_unmap(&destination);
-
-        bytes_copied += copy_bytes;
-    }
-    
-
-    filesystem_destroy_mapped_file(&final_file);
+    file_io_copy_file(&transfer->download_file, upload_path, transfer->file_size);
 }
 
 void

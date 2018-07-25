@@ -81,3 +81,37 @@ generate_temporary_file_path(file_io* io, char* output_path, int output_path_len
     platform_format(output_path, output_path_length, "%s%c%05d", io->temporary_directory,
                     platform_path_delimiter, io->temporary_file_index++);
 }
+
+void
+file_io_copy_file(mapped_file* source, char* destination, int64_t file_size)
+{
+    int copy_byte_count = 4096;
+
+    mapped_file destination_file = filesystem_create_mapped_file(destination, 0, file_size);
+    // TODO: Check for errors opening destination file.
+
+    int64_t bytes_copied = 0;
+    while(bytes_copied < file_size)
+    {
+        int64_t remaining_bytes = (file_size - bytes_copied);
+        int     copy_bytes      = copy_byte_count;
+
+        if(copy_bytes > remaining_bytes)
+        {
+            copy_bytes = (int)remaining_bytes;
+        }
+
+        mapped_file_view sview = filesystem_file_view_map(source, copy_bytes);
+        mapped_file_view dview = filesystem_file_view_map(&destination_file, copy_bytes);
+        // TODO: Check for errors mapping views.
+
+        memcpy(dview.mapped, sview.mapped, copy_bytes);
+        
+        filesystem_file_view_unmap(&sview);
+        filesystem_file_view_unmap(&dview);
+
+        bytes_copied += copy_bytes;
+    }
+
+    filesystem_destroy_mapped_file(&destination_file);
+}
