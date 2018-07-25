@@ -415,7 +415,7 @@ fileserver_write_final_file(file_io* io, connection_file_transfer* transfer)
         int copy_bytes = 4096;
         if(copy_bytes > (transfer->file_size - bytes_copied))
         {
-            copy_bytes = (transfer->file_size - bytes_copied);
+            copy_bytes = (int)(transfer->file_size - bytes_copied);
         }
 
         transfer->download_file.offset = bytes_copied;

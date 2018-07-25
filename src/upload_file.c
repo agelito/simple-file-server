@@ -30,7 +30,7 @@ upload_file(connection* connection, mapped_file* file)
             int64_t remaining_bytes = (file->file_size - sent_bytes);
             if(send_chunk_size > remaining_bytes)
             {
-                send_chunk_size = remaining_bytes;
+                send_chunk_size = (int)remaining_bytes;
             }
             packet_file_upload_chunk upload_chunk;
             upload_chunk.chunk_size = send_chunk_size;
