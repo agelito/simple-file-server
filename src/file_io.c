@@ -87,6 +87,8 @@ file_io_copy_file(mapped_file* source, char* destination, int64_t file_size)
 {
     int copy_byte_count = 4096;
 
+    // TODO: Should it be allowed overwriting file if it already exists?
+
     mapped_file destination_file = filesystem_create_mapped_file(destination, 0, file_size);
     // TODO: Check for errors opening destination file.
 
