@@ -22,6 +22,9 @@ typedef struct connection
     int						 send_data_count;
 	int                      send_data_capacity;
     char*					 send_data;
+    int                      recv_data_count;
+    int                      recv_data_capacity;
+    char*                    recv_data;
     int                      transfer_completed;
 	int						 transfer_in_progress;
 	connection_file_transfer transfer;
@@ -57,8 +60,11 @@ create_connection_storage(int capacity)
     {
         connection* connection = (connection_storage.connections + i);
         connection->send_data_count	   = 0;
-        connection->send_data_capacity = (MAX_PACKET_SIZE * 4);
-        connection->send_data		   = malloc(MAX_PACKET_SIZE * 4);
+        connection->send_data_capacity = (MAX_PACKET_SIZE * 16);
+        connection->send_data		   = malloc(MAX_PACKET_SIZE * 16);
+        connection->recv_data_count    = 0;
+        connection->recv_data_capacity = (MAX_PACKET_SIZE * 16);
+        connection->recv_data          = malloc(MAX_PACKET_SIZE * 16);
     }
 
     return connection_storage;
@@ -80,6 +86,13 @@ destroy_connection_storage(connection_storage* connection_storage)
         connection->send_data		   = 0;
         connection->send_data_count	   = 0;
         connection->send_data_capacity = 0;
+
+        if(connection->recv_data)
+            free(connection->recv_data);
+
+        connection->recv_data		   = 0;
+        connection->recv_data_count	   = 0;
+        connection->recv_data_capacity = 0;
     }
 
     connection_storage->count = 0;
@@ -101,6 +114,7 @@ create_new_connection(connection_storage* connection_storage)
         new_connection->socket_initialized	 = 0;
         new_connection->pending_disconnect	 = 0;
         new_connection->send_data_count		 = 0;
+        new_connection->recv_data_count      = 0;
         new_connection->transfer_in_progress = 0;
         
         memset(&new_connection->transfer, 0, sizeof(connection_file_transfer));
@@ -279,10 +293,19 @@ connection_send_network_data(connection* connection)
         }
     }
 
-    // TODO: Rewind send_data buffer so the next byte to be sent
-    // is located at index 0. Preserve any bytes which couldn't be
-    // sent this time.
-    connection->send_data_count = 0;
+    if(sent_bytes < connection->send_data_count)
+    {
+        char* offset = (connection->send_data + sent_bytes);
+        int   length = (connection->send_data_count - sent_bytes);
+
+        memmove(connection->send_data, offset, length);
+
+        connection->send_data_count = length;
+    }
+    else
+    {
+        connection->send_data_count = 0;
+    }
     
     return sent_bytes;
 }
@@ -290,13 +313,30 @@ connection_send_network_data(connection* connection)
 int
 connection_recv_network_data(connection* connection, char* io_buffer, int io_buffer_size)
 {
-    int recv_result = socket_recv(connection->socket, io_buffer, io_buffer_size);
-    if(recv_result == -1)
+    int remaining_size = io_buffer_size;
+    int received_bytes = 0;
+    while(remaining_size > 0)
     {
-        connection_disconnect(connection);
+        int recv_result = socket_recv(connection->socket, io_buffer + received_bytes, remaining_size);
+        if(recv_result == 0) 
+        {
+            break;
+        }
+        else if(recv_result == -1)
+        {
+            if(SOCKET_CHECK_ERROR_NO_PANIC() != 0)
+            {
+                connection_disconnect(connection);
+            }
+
+            break;
+        }
+
+        received_bytes += recv_result;
+        remaining_size -= recv_result;
     }
 
-    return recv_result;
+    return received_bytes;
 }
 
 void
@@ -307,8 +347,8 @@ connection_transfer_prepare(connection_file_transfer* transfer, int64_t size)
     transfer->byte_count_disk = 0;
 
     transfer->io_buffer_size     = 0;
-    transfer->io_buffer_capacity = MAX_PACKET_SIZE * 4;
-    transfer->io_buffer          = malloc(MAX_PACKET_SIZE * 4);
+    transfer->io_buffer_capacity = MAX_PACKET_SIZE * 16;
+    transfer->io_buffer          = malloc(MAX_PACKET_SIZE * 16);
 
     memset(&transfer->download_file, 0, sizeof(mapped_file));
 }

@@ -25,7 +25,6 @@ typedef struct fileserver
 	char                  address_string[INET_STRADDR_LENGTH];
 	selectable_set        selectable;
 	connection_storage    connection_storage;
-	char*                 receive_data_buffer;
 	timer                 timer;
     float                 last_print_time;
     connection_statistics statistics;
@@ -60,10 +59,10 @@ print_server_info(fileserver* fileserver)
         if(statistics->rejected_connections)
 	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
         if(statistics->sent_bytes)
-            printf("%-20s: %.02fb/u %db/s\n", "Outgoing", 
+            printf("%-20s: %.02fB/u %dB/s\n", "Outgoing", 
                    (float)statistics->sent_bytes * average, statistics->sent_bytes);
         if(statistics->recv_bytes)
-            printf("%-20s: %.02fb/u %db/s\n", "Incoming", 
+            printf("%-20s: %.02fB/u %dB/s\n", "Incoming", 
                    (float)statistics->recv_bytes * average, statistics->recv_bytes);
 
         statistics->connections			 = 0;
@@ -75,6 +74,8 @@ print_server_info(fileserver* fileserver)
         connection_storage* connection_storage = &fileserver->connection_storage;
         printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
                connection_storage->capacity);
+
+        // TODO: Need to improve performance of outputting transfer progress bars.
 
         int i;
         for(i = 0; i < connection_storage->count; ++i)
@@ -88,28 +89,32 @@ print_server_info(fileserver* fileserver)
 		        float transfer_percent = (float)connection->transfer.byte_count_recv /
 		                                        connection->transfer.file_size;
 
-		        printf("%-20s: %ld / %ld (%0.02f%%)", "Transfer",
-		               transfer->byte_count_recv, transfer->file_size,
-		               transfer_percent * 100.0f);
+		        printf("%-20s: ", "Transfer");
 
 		        printf("|");
+
+                int progress_bar_width = 60;
+                int progress_bar_head = (int)(progress_bar_width * transfer_percent);
 		        
 		        int c;
-		        for(c = 0; c < 40; ++c)
+		        for(c = 0; c < progress_bar_width; ++c)
 		        {
 			        char character = '-';
-			        float progress = (float)c / 40.0f;
-			        if(progress < transfer_percent)
-			        {
-				        character = '=';
-			        }
+                    if(c < progress_bar_head)
+                    {
+                        character = '=';
+                    }
+                    else if(c == progress_bar_head)
+                    {
+                        character = '>';
+                    }
 
 			        printf("%c", character);
 		        }
 
 		        printf("|");
 
-		        printf("\n");
+                printf(" %ld / %ld (%0.02f%%)\n", transfer->byte_count_recv, transfer->file_size, transfer_percent * 100.0f);
 	        }
         }
 
@@ -240,7 +245,7 @@ fileserver_receive_packet_body(connection* connection, int packet_type, char* pa
     }
 }
 
-void
+int
 fileserver_receive_packets(connection* connection, char* data, int length)
 {
 	int read_bytes = 0;
@@ -250,12 +255,10 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 	    
 	    int remaining_bytes = (length - read_bytes);
 	    
-	    // TODO: Connection need buffer to store incoming packet data. Now
-	    // incomplete packets wont be delivered.
-	    
 	    int header_length = sizeof(packet_header);
 	    if(header_length > remaining_bytes)
 	    {
+            // NOTE: Packet is incomplete.
 		    break;
 	    }
 	    
@@ -266,15 +269,15 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 	        break;
         }
 
-        read_bytes += header_length;
-
-
-        remaining_bytes = (length - read_bytes);
+        read_bytes      += header_length;
+        remaining_bytes -= header_length;
 
         int packet_length = header->packet_size;
         if(packet_length > remaining_bytes)
         {
-	        break;
+            // NOTE: Packet is incomplete.
+            read_bytes -= header_length;
+            break;
         }
 
         char* packet_data_body = read_data + header_length;
@@ -283,6 +286,8 @@ fileserver_receive_packets(connection* connection, char* data, int length)
 
         read_bytes += packet_length;
     }
+
+    return read_bytes;
 }
 
 void
@@ -359,8 +364,8 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 }
 
 void
-process_connection_network_io(connection_storage* connection_storage, selectable_set* selectable,
-                              char* io_buffer, int io_buffer_size, connection_statistics* statistics)
+process_connection_network_io(connection_storage* connection_storage, selectable_set* selectable, 
+                              connection_statistics* statistics)
 {
 	int connection_index;
 	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
@@ -386,12 +391,35 @@ process_connection_network_io(connection_storage* connection_storage, selectable
                 socket_set_nonblocking(connection->socket);
                 connection->socket_initialized = 1;
             }
-            
-            int recv_bytes = connection_recv_network_data(connection, io_buffer, io_buffer_size);
+
+            int recv_buffer_remaining = (connection->recv_data_capacity - connection->recv_data_count);
+            char* recv_data_buffer = (connection->recv_data + connection->recv_data_count);
+            int recv_bytes = connection_recv_network_data(connection, recv_data_buffer , recv_buffer_remaining);
             if(recv_bytes > 0)
             {
                 statistics->recv_bytes += recv_bytes;
-				fileserver_receive_packets(connection, io_buffer, recv_bytes);
+                connection->recv_data_count += recv_bytes;
+            }
+
+            if(connection->recv_data_count > 0)
+            {
+				int read_bytes = fileserver_receive_packets(connection, connection->recv_data, connection->recv_data_count);
+                if(read_bytes <= connection->recv_data_count)
+                {
+                    char* offset = (connection->recv_data + read_bytes);
+                    int   length = (connection->recv_data_count - read_bytes);
+                    if(length > 0)
+                    {
+                        memmove(connection->recv_data, offset, length);
+                    }
+                    connection->recv_data_count -= read_bytes;
+                }
+                else
+                {
+                    // NOTE: Packet stream error.
+                    connection->pending_disconnect = 1;
+                    connection->recv_data_count    = 0;
+                }
             }
 		}
 	}
@@ -485,9 +513,7 @@ fileserver_tick(fileserver* fileserver)
 	if(selected > 0)
 	{
 		// NOTE: Process already connected connections before accepting new connections.
-		process_connection_network_io(&fileserver->connection_storage, &fileserver->selectable,
-		                              fileserver->receive_data_buffer,
-		                              MAX_PACKET_SIZE, &fileserver->statistics);
+		process_connection_network_io(&fileserver->connection_storage, &fileserver->selectable, &fileserver->statistics);
 	}
 
 	selectable_set_clear(&fileserver->selectable);
@@ -525,7 +551,6 @@ fileserver_create()
 
     fileserver.selectable          = selectable_set_create();
     fileserver.connection_storage  = create_connection_storage(MAX_CONNECTION_COUNT);
-    fileserver.receive_data_buffer = malloc(MAX_PACKET_SIZE * 24);
 
     fileserver.socket = socket_create_tcp();
     socket_set_nonblocking(fileserver.socket);
@@ -545,7 +570,6 @@ fileserver_destroy(fileserver* fileserver)
 {
     file_io_destroy(&fileserver->io);
     destroy_connection_storage(&fileserver->connection_storage);
-    free(fileserver->receive_data_buffer);
     socket_close(fileserver->socket);
 }
 

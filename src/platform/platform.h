@@ -15,7 +15,7 @@
 #define CURRENT_FUNCTION __func__
 #endif
 
-#define MAX_CONNECTION_COUNT 1024
+#define MAX_CONNECTION_COUNT 128
 
 #define SOCKET_CHECK_ERROR() if(socket_check_error((char*)CURRENT_FUNCTION) != 0) panic(1)
 #define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)CURRENT_FUNCTION)
