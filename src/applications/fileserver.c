@@ -481,7 +481,7 @@ fileserver_tick(fileserver* fileserver)
 	                                                    &fileserver->selectable,
 	                                                    &fileserver->statistics);
 
-	int selected = selectable_set_select(&fileserver->selectable, highest_handle, 4);
+	int selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
 	if(selected > 0)
 	{
 		// NOTE: Process already connected connections before accepting new connections.
@@ -494,7 +494,7 @@ fileserver_tick(fileserver* fileserver)
 	selectable_set_set_read(&fileserver->selectable, fileserver->socket);
 
 	highest_handle = fileserver->socket + 1;
-	selected = selectable_set_select(&fileserver->selectable, highest_handle, 4);
+	selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
 
 	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->socket))
 	{
