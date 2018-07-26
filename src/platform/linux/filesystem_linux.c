@@ -142,7 +142,7 @@ filesystem_file_view_map(mapped_file* mapped_file, int64_t size)
 	int64_t extra_size			= (mapped_file->offset - aligned_offset);
 	int64_t aligned_size        = ((size + extra_size) & ~(page_size - 1));
 
-	if(aligned_size < size)
+	if(aligned_size < (size + extra_size))
 		aligned_size += page_size;
 
 	view.base = mmap(0, (size_t)aligned_size, protection, MAP_SHARED,
