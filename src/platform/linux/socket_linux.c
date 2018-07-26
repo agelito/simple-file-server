@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
@@ -66,15 +67,15 @@ socket_close(socket_handle socket)
 void
 socket_set_nonblocking(socket_handle socket)
 {
-	int flags = fcntl(socket, F_GETFL, 0);
-	fcntl(socket, F_SETFD, flags | O_NONBLOCK);
+	int nonblocking_on = 1;
+	ioctl(socket, FIONBIO, (char *)&nonblocking_on);
 }
 
 void
 socket_set_blocking(socket_handle socket)
 {
-	int flags = fcntl(socket, F_GETFL, 0);
-	fcntl(socket, F_SETFD, flags & (~O_NONBLOCK));
+	int nonblocking_on = 0;
+	ioctl(socket, FIONBIO, (char *)&nonblocking_on);
 }
 
 void
