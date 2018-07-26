@@ -13,6 +13,7 @@ typedef struct connection_statistics
 {
 	int connections;
 	int rejected_connections;
+    int pending_disconnections;
 	int disconnections;
     int sent_bytes;
     int recv_bytes;
@@ -58,6 +59,8 @@ print_server_info(fileserver* fileserver)
 	        printf("%-20s: %d\n", "Disconnected", statistics->disconnections);
         if(statistics->rejected_connections)
 	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
+        if(statistics->pending_disconnections)
+            printf("%-20s: %d\n", "Pending Disconnections", statistics->pending_disconnections);
         if(statistics->sent_bytes)
             printf("%-20s: %.02fB/u %dB/s\n", "Outgoing", 
                    (float)statistics->sent_bytes * average, statistics->sent_bytes);
@@ -327,6 +330,7 @@ int
 process_connection_connections(connection_storage* connection_storage, selectable_set* selectable,
                                connection_statistics* statistics)
 {
+    int pending_disconnect_count = 0;
 	int highest_handle = 0;
 	int connection_index;
 	for(connection_index = 0; connection_index < connection_storage->count; ++connection_index)
@@ -335,8 +339,13 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 
 		if(connection->pending_disconnect && connection->send_data_count == 0)
 		{
-			connection_disconnect(connection);
-			statistics->disconnections += 1;
+            pending_disconnect_count += 1;
+
+            if(connection->send_data_count == 0)
+            {
+                connection_disconnect(connection);
+                statistics->disconnections += 1;
+            }
 		}
             
 		if(!connection->socket)
@@ -359,6 +368,8 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 		if((int)connection->socket > highest_handle)
 			highest_handle = (int)connection->socket;
 	}
+
+    statistics->pending_disconnections = pending_disconnect_count;
 
 	return highest_handle;
 }
