@@ -12,6 +12,8 @@ filesystem_create_directory(char* directory_path)
 void 
 filesystem_delete_directory(char* directory_path)
 {
+    // TODO: Recursively delete all files in the directory first.
+    
     int result = RemoveDirectoryA(directory_path);
     if(result == 0) panic(1);
 }
