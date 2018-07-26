@@ -289,11 +289,10 @@ void
 accept_incoming_connections(int count, socket_handle socket, connection_storage* connection_storage,
                             connection_statistics* statistics)
 {
-	int max_incoming_per_frame = 128;
-	if(count > max_incoming_per_frame)
-		count = max_incoming_per_frame;
-	
-	while(0 < count--)
+    UNUSED(count);
+
+    int accepting = 1;
+	while(accepting)
 	{
 		socket_address accepted_address;
 		socket_handle accepted = socket_accept(socket, &accepted_address);
@@ -482,7 +481,7 @@ fileserver_tick(fileserver* fileserver)
 	                                                    &fileserver->selectable,
 	                                                    &fileserver->statistics);
 
-	int selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+	int selected = selectable_set_select(&fileserver->selectable, highest_handle, 4);
 	if(selected > 0)
 	{
 		// NOTE: Process already connected connections before accepting new connections.
@@ -495,7 +494,7 @@ fileserver_tick(fileserver* fileserver)
 	selectable_set_set_read(&fileserver->selectable, fileserver->socket);
 
 	highest_handle = fileserver->socket + 1;
-	selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+	selected = selectable_set_select(&fileserver->selectable, highest_handle, 4);
 
 	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->socket))
 	{
