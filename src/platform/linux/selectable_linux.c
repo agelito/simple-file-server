@@ -1,5 +1,7 @@
 // selectable_linux.c
 
+#include "../platform.h"
+
 selectable_set
 selectable_set_create()
 {

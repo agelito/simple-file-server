@@ -1,6 +1,6 @@
 // console_linux.c
 
-#include "platform.h"
+#include "../platform.h"
 
 #include <signal.h>
 

@@ -1,5 +1,7 @@
 // timer_linux.c
 
+#include "../platform.h"
+
 #include <x86intrin.h> 
 
 double

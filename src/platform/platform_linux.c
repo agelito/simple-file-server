@@ -25,11 +25,11 @@
 
 #define NANOSECOND 1000000000
 
-#include "platform_common.c"
-#include "selectable_linux.c"
-#include "console_linux.c"
-#include "timer_linux.c"
-#include "socket_linux.c"
+#include "common/platform_common.c"
+#include "linux/selectable_linux.c"
+#include "linux/console_linux.c"
+#include "linux/timer_linux.c"
+#include "linux/socket_linux.c"
 
 int platform_quit = 0;
 char platform_path_delimiter = '/';

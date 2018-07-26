@@ -1,6 +1,6 @@
 // socket_linux.c
 
-#include "platform.h"
+#include "../platform.h"
 
 #include <errno.h>
 #include <string.h>

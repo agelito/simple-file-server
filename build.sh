@@ -6,11 +6,12 @@ cd "${BASE_DIR}"
 
 COMPILE_START=$(./tools/ctime)
 
-gcc -std=c99 -o bin/server_locator -Wall -O3 -pedantic -lrt src/server_locator.c src/platform_linux.c
-gcc -std=c99 -o bin/fileserver -Wall -O3 -pedantic -lrt src/fileserver.c src/platform_linux.c
-gcc -std=c99 -o bin/stress_test -Wall -O3 -pedantic -lrt src/stress_test.c src/platform_linux.c
-gcc -std=c99 -o bin/map_file_test -Wall -O3 -pedantic -lrt src/map_file_test.c src/platform_linux.c
-gcc -std=c99 -o bin/upload_file -Wall -O3 -pedantic -lrt src/upload_file.c src/platform_linux.c
+gcc -std=c99 -o bin/server_locator -Wall -O3 -pedantic -lrt -Isrc src/applications/server_locator.c src/platform/platform_linux.c
+gcc -std=c99 -o bin/fileserver -Wall -O3 -pedantic -lrt -Isrc src/applications/fileserver.c src/platform/platform_linux.c
+gcc -std=c99 -o bin/upload_file -Wall -O3 -pedantic -lrt -Isrc src/applications/upload_file.c src/platform/platform_linux.c
+gcc -std=c99 -o bin/stress_test -Wall -O3 -pedantic -lrt -Isrc src/applications/test/stress_test.c src/platform/platform_linux.c
+gcc -std=c99 -o bin/map_file_test -Wall -O3 -pedantic -lrt -Isrc src/applications/test/map_file_test.c src/platform/platform_linux.c
+
 
 COMPILE_TIME=$(./tools/ctime ${COMPILE_START})
 echo "Compilation took ${COMPILE_TIME} seconds."
