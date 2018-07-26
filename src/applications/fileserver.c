@@ -356,6 +356,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 
 		if(!connection->pending_disconnect)
 		{
+            // TODO: Find if client connection socket's been disconnected on the remote end.
 			selectable_set_set_read(selectable, connection->socket);
 		}
 
