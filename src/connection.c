@@ -288,7 +288,8 @@ connection_send_network_data(connection* connection)
         }
         else
         {
-            connection_disconnect(connection);
+            connection->send_data_count = 0;
+            connection->pending_disconnect = 1;
             break;
         }
     }
@@ -318,17 +319,19 @@ connection_recv_network_data(connection* connection, char* io_buffer, int io_buf
     while(remaining_size > 0)
     {
         int recv_result = socket_recv(connection->socket, io_buffer + received_bytes, remaining_size);
-        if(recv_result == 0) 
-        {
-            break;
-        }
-        else if(recv_result == -1)
+        if(recv_result == -1) 
         {
             if(SOCKET_CHECK_ERROR_NO_PANIC() != 0)
             {
-                connection_disconnect(connection);
+                connection->pending_disconnect = 1;
             }
 
+            break;
+        }
+        else if(recv_result == 0)
+        {
+            connection->send_data_count = 0;
+            connection->pending_disconnect = 1;
             break;
         }
 

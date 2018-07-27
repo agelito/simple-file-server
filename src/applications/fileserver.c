@@ -337,7 +337,10 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 	{
 		connection* connection = (connection_storage->connections + connection_index);
 
-		if(connection->pending_disconnect && connection->send_data_count == 0)
+        // TODO: If the connection is pending disconnect because of socket error
+        // or disconnection this may cause problems. The connection will never be
+        // able to send the reamining data.
+		if(connection->pending_disconnect)
 		{
             pending_disconnect_count += 1;
 
@@ -356,7 +359,6 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 
 		if(!connection->pending_disconnect)
 		{
-            // TODO: Find if client connection socket's been disconnected on the remote end.
 			selectable_set_set_read(selectable, connection->socket);
 		}
 
