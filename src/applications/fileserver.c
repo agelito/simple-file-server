@@ -255,7 +255,7 @@ int
 fileserver_receive_packets(connection* connection, char* data, int length)
 {
 	int read_bytes = 0;
-    while(read_bytes < length && !connection->pending_disconnect)
+    while(read_bytes < length)
     {
 	    char* read_data = data + read_bytes;
 	    
@@ -340,6 +340,10 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 	{
 		connection* connection = (connection_storage->connections + connection_index);
 
+        // TODO: Make sure clients can't abuse this to make their connection persistent.
+        int transfer_in_progress = ((connection->transfer_in_progress && connection->recv_data_count > 0) ||
+                                    connection->transfer_completed);
+
         // TODO: If the connection is pending disconnect because of socket error
         // or disconnection this may cause problems. The connection will never be
         // able to send the reamining data.
@@ -347,7 +351,7 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 		{
             pending_disconnect_count += 1;
 
-            if(connection->send_data_count == 0)
+            if(!transfer_in_progress && connection->send_data_count == 0)
             {
                 connection_disconnect(connection);
                 statistics->disconnections += 1;
@@ -360,10 +364,10 @@ process_connection_connections(connection_storage* connection_storage, selectabl
 			continue;
 		}
 
-		if(!connection->pending_disconnect)
-		{
-			selectable_set_set_read(selectable, connection->socket);
-		}
+        if(transfer_in_progress || !connection->pending_disconnect)
+        {
+            selectable_set_set_read(selectable, connection->socket);
+        }
 
 		// NOTE: Keep sending data even if connection is pending disconnect.
         if(connection->send_data_count > 0)
