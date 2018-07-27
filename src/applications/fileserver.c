@@ -32,6 +32,8 @@ typedef struct fileserver
     file_io               io;
 } fileserver;
 
+#define TO_MB(bytes) (float)bytes / 1024.0f / 1024.0f
+
 float
 print_server_info(fileserver* fileserver)
 {
@@ -62,11 +64,11 @@ print_server_info(fileserver* fileserver)
         if(statistics->pending_disconnections)
             printf("%-20s: %d\n", "Pending Disconnections", statistics->pending_disconnections);
         if(statistics->sent_bytes)
-            printf("%-20s: %.02fB/u %dB/s\n", "Outgoing", 
-                   (float)statistics->sent_bytes * average, statistics->sent_bytes);
+            printf("%-20s: %.02fMB/u %.02fMB/s\n", "Outgoing", 
+                   TO_MB(statistics->sent_bytes * average), TO_MB(statistics->sent_bytes));
         if(statistics->recv_bytes)
-            printf("%-20s: %.02fB/u %dB/s\n", "Incoming", 
-                   (float)statistics->recv_bytes * average, statistics->recv_bytes);
+            printf("%-20s: %.02fMB/u %.02fMB/s\n", "Incoming", 
+                   TO_MB(statistics->recv_bytes * average), TO_MB(statistics->recv_bytes));
 
         statistics->connections			 = 0;
         statistics->disconnections		 = 0;
@@ -117,7 +119,8 @@ print_server_info(fileserver* fileserver)
 
 		        printf("|");
 
-                printf(" %ld / %ld (%0.02f%%)\n", transfer->byte_count_recv, transfer->file_size, transfer_percent * 100.0f);
+                printf(" %.02f / %.02f MB (%0.02f%%)\n", TO_MB(transfer->byte_count_recv), 
+                       TO_MB(transfer->file_size), transfer_percent * 100.0f);
 	        }
         }
 
