@@ -94,6 +94,7 @@ void			socket_cleanup();
 socket_handle	socket_create_udp();
 socket_handle	socket_create_tcp();
 void			socket_close(socket_handle socket);
+void            socket_set_reuseaddr(socket_handle socket);
 void			socket_set_nonblocking(socket_handle socket);
 void            socket_set_blocking(socket_handle socket);
 void            socket_set_nolinger(socket_handle socket);

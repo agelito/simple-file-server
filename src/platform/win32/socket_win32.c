@@ -60,6 +60,7 @@ socket_create_tcp()
 	SOCKET created_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	SOCKET_CHECK_ERROR();
 
+    socket_set_reuseaddr((socket_handle)created_socket);
 	socket_set_nonblocking((socket_handle)created_socket);
 
 	return (socket_handle)created_socket;
@@ -79,6 +80,14 @@ socket_enable_broadcast(socket_handle socket)
 	setsockopt((SOCKET)socket, SOL_SOCKET, SO_BROADCAST,
 	           (char*)&allow_broadcast, sizeof(allow_broadcast));
 	SOCKET_CHECK_ERROR_NO_PANIC();
+}
+
+void
+socket_set_reuseaddr(socket_handle socket)
+{
+    BOOL optval = 1;
+    int opt_result = setsockopt((SOCKET)socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(BOOL));
+    if(opt_result == SOCKET_ERROR) SOCKET_CHECK_ERROR_NO_PANIC();
 }
 
 void 
