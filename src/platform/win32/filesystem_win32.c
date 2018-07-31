@@ -6,7 +6,7 @@ void
 filesystem_create_directory(char* directory_path)
 {
     int result = CreateDirectoryA(directory_path, 0);
-    if(result == 0) panic(1);
+    if(result == 0) panic("Couldn't create directory.", 1);
 }
 
 void 
@@ -15,7 +15,7 @@ filesystem_delete_directory(char* directory_path)
     // TODO: Recursively delete all files in the directory first.
     
     int result = RemoveDirectoryA(directory_path);
-    if(result == 0) panic(1);
+    if(result == 0) panic("Couldn't remove directory.", 1);
 }
 
 int
@@ -31,7 +31,7 @@ int
 filesystem_open_create_file(char* file_path)
 {
     HANDLE file = CreateFileA(file_path, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-    if(file == INVALID_HANDLE_VALUE) panic(1);
+    if(file == INVALID_HANDLE_VALUE) panic("Couldn't create file.", 1);
     return (int)file;
 }
 
@@ -39,7 +39,7 @@ int
 filesystem_open_read_file(char* file_path)
 {
     HANDLE file = CreateFileA(file_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if(file == INVALID_HANDLE_VALUE) panic(1);
+    if(file == INVALID_HANDLE_VALUE) panic("Couldn't open file.", 1);
     return (int)file;
 }
 
@@ -105,7 +105,7 @@ filesystem_create_mapped_file(char* file_path, int read_only, int64_t size)
 
     file_handle file_mapping = (file_handle)CreateFileMappingA((HANDLE)file, NULL, mapping_protection, 
                                                                file_size.HighPart, file_size.LowPart, NULL);
-    if(file_mapping == 0) panic(1);
+    if(file_mapping == 0) panic("Couldn't create file mapping.", 1);
 
     mapped.mapping = file_mapping;
 
@@ -174,7 +174,7 @@ filesystem_file_view_map(mapped_file* mapped_file, int64_t size)
     {
         DWORD error_code = GetLastError();
         printf("Error mapping file view: %d\n", error_code);
-        panic(1);
+        panic("Couldn't create view of file.", 1);
     }
 
     view.mapped       = (uint8_t*)view.base + extra_size;

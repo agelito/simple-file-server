@@ -234,7 +234,7 @@ fileserver_receive_packet_body(connection* connection, int packet_type, char* pa
     switch(packet_type)
     {
     case PACKET_DISCONNECT: 
-        connection->pending_disconnect = 1;
+        connection->request_disconnect = 1;
         break;
     case PACKET_FILE_UPLOAD_BEGIN:
 	    fileserver_upload_begin(connection, packet_body, body_length);
@@ -344,10 +344,12 @@ process_connection_connections(connection_storage* connection_storage, selectabl
         int transfer_in_progress = ((connection->transfer_in_progress && connection->recv_data_count > 0) ||
                                     connection->transfer_completed);
 
-        // TODO: If the connection is pending disconnect because of socket error
-        // or disconnection this may cause problems. The connection will never be
-        // able to send the reamining data.
-		if(connection->pending_disconnect)
+        if(connection->request_disconnect || connection->error)
+        {
+            connection_disconnect(connection);
+            statistics->disconnections += 1;
+        }
+		else if(connection->pending_disconnect)
 		{
             pending_disconnect_count += 1;
 

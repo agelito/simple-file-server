@@ -17,7 +17,7 @@
 
 #define MAX_CONNECTION_COUNT 128
 
-#define SOCKET_CHECK_ERROR() if(socket_check_error((char*)CURRENT_FUNCTION) != 0) panic(1)
+#define SOCKET_CHECK_ERROR() if(socket_check_error((char*)CURRENT_FUNCTION) != 0) panic("SOCKET_CHECK_ERROR", 1)
 #define SOCKET_CHECK_ERROR_NO_PANIC() socket_check_error((char*)CURRENT_FUNCTION)
 
 extern char platform_path_delimiter;
@@ -70,7 +70,7 @@ typedef struct mapped_file_view {
     int64_t size;
 } mapped_file_view;
 
-void panic(int exit_code);
+void panic(char* message, int exit_code);
 
 void thread_sleep();
 

@@ -37,14 +37,14 @@ void
 exe_set_working_directory(char* directory_path)
 {
     int result = SetCurrentDirectoryA(directory_path);
-    if(result == 0) panic(1);
+    if(result == 0) panic("Couldn't set working directory.", 1);
 }
 
 void 
 exe_get_directory(char* output, int output_length)
 {
     int result = GetModuleFileNameA(0, output, output_length);
-    if(result == 0) panic(1);
+    if(result == 0) panic("Couldn't get module file name.", 1);
 
     int last_character_index = result - 1;
     while(last_character_index > 0)

@@ -18,7 +18,9 @@ typedef struct connection
     socket_address			 address;
 	char					 address_string[INET_STRADDR_LENGTH];
     int                      socket_initialized;
+    int                      request_disconnect;
     int						 pending_disconnect;
+    int                      error;
     int						 send_data_count;
 	int                      send_data_capacity;
     char*					 send_data;
@@ -45,6 +47,9 @@ destroy_connection_storage(connection_storage* connection_storage);
 
 connection* 
 create_new_connection(connection_storage* connection_storage);
+
+void
+connection_transfer_cancel(connection* connection);
 
 connection_storage 
 create_connection_storage(int capacity)
@@ -110,9 +115,16 @@ create_new_connection(connection_storage* connection_storage)
     {
         new_connection = (connection_storage->connections + connection_storage->count++);
 
+        // NOTE: All of the connection fields isn't set to zero because the 
+        // allocation of memory for the connection only happens once. Perhaps
+        // this data pointers should be maintained somewhere else and the
+        // socket just retrieve a reference to that location instead.
+
         new_connection->socket				 = 0;
         new_connection->socket_initialized	 = 0;
+        new_connection->request_disconnect   = 0;
         new_connection->pending_disconnect	 = 0;
+        new_connection->error                = 0;
         new_connection->send_data_count		 = 0;
         new_connection->recv_data_count      = 0;
         new_connection->transfer_in_progress = 0;
@@ -125,11 +137,19 @@ create_new_connection(connection_storage* connection_storage)
 void
 connection_disconnect(connection* connection)
 {
+    connection_transfer_cancel(connection);
+
     if(connection->socket)
     {
         socket_close(connection->socket);
         connection->socket = 0;
     }
+}
+
+void
+connection_error(connection* connection)
+{
+    connection->error = 1;
 }
 
 void
@@ -248,6 +268,10 @@ connection_push_data_packet(connection* connection, char packet_type, char* pack
 
         return 1;
     }
+    else
+    {
+        panic("Couldn't submit packet, not enough space in buffer.", 1);
+    }
 
     return 0;
 }
@@ -263,6 +287,7 @@ connection_protocol_error(connection* connection)
 {
     connection_push_empty_packet(connection, PACKET_INVALID_PROTOCOL);
     connection->pending_disconnect = 1;
+    connection->error              = 1;
 }
 
 int
@@ -354,5 +379,16 @@ connection_transfer_prepare(connection_file_transfer* transfer, int64_t size)
     transfer->io_buffer          = malloc(MAX_PACKET_SIZE * 16);
 
     memset(&transfer->download_file, 0, sizeof(mapped_file));
+}
+
+void
+connection_transfer_cancel(connection* connection)
+{
+    if(connection->transfer_in_progress || connection->transfer_completed)
+    {
+        connection_transfer_free(&connection->transfer);
+        connection->transfer_in_progress = 0;
+        connection->transfer_completed = 0;
+    }
 }
 
