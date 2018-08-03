@@ -87,7 +87,6 @@ measure_initialize(measure_time* measure)
 void 
 measure_tick(measure_time* measure)
 {
-
     LARGE_INTEGER performance_counter;
     QueryPerformanceCounter(&performance_counter);
     

@@ -3,6 +3,7 @@
 #include "platform/platform.h"
 #include "protocol.h"
 
+#include "application.h"
 #include "string_sanitize.c"
 #include "file_io.c"
 #include "connection.c"
@@ -26,108 +27,103 @@ typedef struct fileserver
 	char                  address_string[INET_STRADDR_LENGTH];
 	selectable_set        selectable;
 	connection_storage    connection_storage;
-	timer                 timer;
-    float                 last_print_time;
     connection_statistics statistics;
     file_io               io;
 } fileserver;
 
 #define TO_MB(bytes) (float)bytes / 1024.0f / 1024.0f
 
-float
-print_server_info(fileserver* fileserver)
+void
+print_server_info(fileserver* fileserver, timer* timer)
 {
-    timer* timer = &fileserver->timer;
-    float last_print_time = fileserver->last_print_time;
-	if(last_print_time <= 0.0f || (timer->elapsed_seconds - last_print_time) >= 1.0f)
-    {
-        connection_statistics* statistics = &fileserver->statistics;
+    connection_statistics* statistics = &fileserver->statistics;
 
-	    console_clear();
+    console_clear();
 
-        printf("%-20s: %s\n", "Listen address", fileserver->address_string);
+    printf("%-20s: %s\n", "Listen address", fileserver->address_string);
 
-        float average = (float)1 / timer->frame_counter;
-        printf("%-20s: %.02fms %.02fups %.02fmcy %.02fs\n", "Performance", 
-               timer->delta_milliseconds * average, 
-               timer->frames_per_second * average, 
-               timer->megacycles_per_frame * average,
-               timer->elapsed_seconds);
-        timer_reset_accumulators(timer);
+    float average = (float)1 / timer->frame_counter;
+    printf("%-20s: %.02fms %.02fups %.02fmcy %.02fs\n", "Performance", 
+           timer->delta_milliseconds * average, 
+           timer->frames_per_second * average, 
+           timer->megacycles_per_frame * average,
+           timer->elapsed_seconds);
 
-        if(statistics->connections)
-	        printf("%-20s: %d\n", "Connected", statistics->connections);
-        if(statistics->disconnections)
-	        printf("%-20s: %d\n", "Disconnected", statistics->disconnections);
-        if(statistics->rejected_connections)
-	        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
-        if(statistics->pending_disconnections)
-            printf("%-20s: %d\n", "Pending Disconnections", statistics->pending_disconnections);
-        if(statistics->sent_bytes)
-            printf("%-20s: %.02fMB/u %.02fMB/s\n", "Outgoing", 
-                   TO_MB(statistics->sent_bytes * average), TO_MB(statistics->sent_bytes));
-        if(statistics->recv_bytes)
-            printf("%-20s: %.02fMB/u %.02fMB/s\n", "Incoming", 
-                   TO_MB(statistics->recv_bytes * average), TO_MB(statistics->recv_bytes));
+    if(statistics->connections)
+        printf("%-20s: %d\n", "Connected", statistics->connections);
+    if(statistics->disconnections)
+        printf("%-20s: %d\n", "Disconnected", statistics->disconnections);
+    if(statistics->rejected_connections)
+        printf("%-20s: %d\n" ,"Rejected", statistics->rejected_connections);
+    if(statistics->pending_disconnections)
+        printf("%-20s: %d\n", "Pending Disconnections", statistics->pending_disconnections);
+    if(statistics->sent_bytes)
+        printf("%-20s: %.02fMB/u %.02fMB/s\n", "Outgoing", 
+               TO_MB(statistics->sent_bytes * average), TO_MB(statistics->sent_bytes));
+    if(statistics->recv_bytes)
+        printf("%-20s: %.02fMB/u %.02fMB/s\n", "Incoming", 
+               TO_MB(statistics->recv_bytes * average), TO_MB(statistics->recv_bytes));
 
-        statistics->connections			 = 0;
-        statistics->disconnections		 = 0;
-        statistics->rejected_connections = 0;
-        statistics->sent_bytes           = 0;
-        statistics->recv_bytes           = 0;
+    statistics->connections			 = 0;
+    statistics->disconnections		 = 0;
+    statistics->rejected_connections = 0;
+    statistics->sent_bytes           = 0;
+    statistics->recv_bytes           = 0;
         
-        connection_storage* connection_storage = &fileserver->connection_storage;
-        printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
-               connection_storage->capacity);
+    connection_storage* connection_storage = &fileserver->connection_storage;
+    printf("%-20s: %d / %d\n", "Connections", connection_storage->count,
+           connection_storage->capacity);
 
-        // TODO: Need to improve performance of outputting transfer progress bars.
+    // TODO: Need to improve performance of outputting transfer progress bars.
 
-        int i;
-        for(i = 0; i < connection_storage->count; ++i)
+    int   progress_bar_width  = 60;
+    char* progress_bar_string = (char*)malloc(progress_bar_width + 1);
+
+    int i;
+    for(i = 0; i < connection_storage->count; ++i)
+    {
+        connection* connection = (connection_storage->connections + i);
+        if(connection->transfer_in_progress)
         {
-	        connection* connection = (connection_storage->connections + i);
-	        if(connection->transfer_in_progress)
-	        {
-		        connection_file_transfer* transfer = &connection->transfer;
+            connection_file_transfer* transfer = &connection->transfer;
 
+            float transfer_percent = (float)connection->transfer.byte_count_recv /
+                connection->transfer.file_size;
 
-		        float transfer_percent = (float)connection->transfer.byte_count_recv /
-		                                        connection->transfer.file_size;
+            printf("%-20s: ", "Transfer");
 
-		        printf("%-20s: ", "Transfer");
+            printf("|");
 
-		        printf("|");
-
-                int progress_bar_width = 60;
-                int progress_bar_head = (int)(progress_bar_width * transfer_percent);
+            int progress_bar_head = (int)(progress_bar_width * transfer_percent);
 		        
-		        int c;
-		        for(c = 0; c < progress_bar_width; ++c)
-		        {
-			        char character = '-';
-                    if(c < progress_bar_head)
-                    {
-                        character = '=';
-                    }
-                    else if(c == progress_bar_head)
-                    {
-                        character = '>';
-                    }
+            int c;
+            for(c = 0; c < progress_bar_width; ++c)
+            {
+                char character = '-';
+                if(c < progress_bar_head)
+                {
+                    character = '=';
+                }
+                else if(c == progress_bar_head)
+                {
+                    character = '>';
+                }
 
-			        printf("%c", character);
-		        }
+                *(progress_bar_string + c) = character;
+            }
 
-		        printf("|");
+            *(progress_bar_string + progress_bar_width) = 0;
+            printf("%s", progress_bar_string);
 
-                printf(" %.02f / %.02f MB (%0.02f%%)\n", TO_MB(transfer->byte_count_recv), 
-                       TO_MB(transfer->file_size), transfer_percent * 100.0f);
-	        }
+
+            printf("|");
+
+            printf(" %.02f / %.02f MB (%0.02f%%)\n", TO_MB(transfer->byte_count_recv), 
+                   TO_MB(transfer->file_size), transfer_percent * 100.0f);
         }
-
-        last_print_time = (float)timer->elapsed_seconds;
     }
 
-    return last_print_time;
+    free(progress_bar_string);
 }
 
 void
@@ -451,6 +447,9 @@ process_connection_network_io(connection_storage* connection_storage, selectable
 void
 fileserver_write_final_file(file_io* io, connection_file_transfer* transfer)
 {
+    // TODO: Optimize file IO. Perhaps need to move to separate thread
+    // so touching the disk doesn't block the main thread.
+
     char upload_path[MAX_FILE_NAME];
     create_upload_file_path(io, transfer->file_name_final, upload_path, MAX_FILE_NAME);
 
@@ -460,6 +459,9 @@ fileserver_write_final_file(file_io* io, connection_file_transfer* transfer)
 void
 fileserver_write_downloaded_data(file_io* io, connection* connection)
 {
+    // TODO: Optimize file IO. Perhaps need to move to separate thread
+    // so touching the disk doesn't block the main thread.
+
     connection_file_transfer* transfer = &connection->transfer;
 
     if(!transfer->download_file.file_path)
@@ -497,132 +499,101 @@ fileserver_write_downloaded_data(file_io* io, connection* connection)
     }
 }
 
-void
-wait_for_target_ups(measure_time* measure, double target_delta)
+int
+fileserver_tick(void* state, timer* timer)
 {
-    measure_tick(measure);
+    UNUSED(timer);
 
-    int sleep_epsilon = 2;
+    fileserver* fileserver_state = (fileserver*)state;
+	selectable_set_clear(&fileserver_state->selectable);
 
-    double accumulator = 0.0;
-    while(accumulator < target_delta)
-    {
-        accumulator += measure->delta_time;
+	int highest_handle = process_connection_connections(&fileserver_state->connection_storage,
+	                                                    &fileserver_state->selectable,
+	                                                    &fileserver_state->statistics);
 
-        double remaining = (target_delta - accumulator);
-        
-        int remaining_milliseconds = (int)(remaining * 1000);
-        if(remaining_milliseconds > sleep_epsilon)
-        {
-            thread_sleep(remaining_milliseconds);
-        }
-
-        measure_tick(measure);
-    }
-}
-
-void
-fileserver_tick(fileserver* fileserver)
-{
-	fileserver->last_print_time = print_server_info(fileserver);
-
-	selectable_set_clear(&fileserver->selectable);
-
-	int highest_handle = process_connection_connections(&fileserver->connection_storage,
-	                                                    &fileserver->selectable,
-	                                                    &fileserver->statistics);
-
-	int selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+	int selected = selectable_set_select_noblock(&fileserver_state->selectable, highest_handle);
 	if(selected > 0)
 	{
 		// NOTE: Process already connected connections before accepting new connections.
-		process_connection_network_io(&fileserver->connection_storage, &fileserver->selectable, &fileserver->statistics);
+		process_connection_network_io(&fileserver_state->connection_storage, &fileserver_state->selectable, &fileserver_state->statistics);
 	}
 
-	selectable_set_clear(&fileserver->selectable);
-	selectable_set_set_read(&fileserver->selectable, fileserver->socket);
+	selectable_set_clear(&fileserver_state->selectable);
+	selectable_set_set_read(&fileserver_state->selectable, fileserver_state->socket);
 
-	highest_handle = fileserver->socket + 1;
-	selected = selectable_set_select_noblock(&fileserver->selectable, highest_handle);
+	highest_handle = fileserver_state->socket + 1;
+	selected = selectable_set_select_noblock(&fileserver_state->selectable, highest_handle);
 
-	if(selected > 0 && selectable_set_can_read(&fileserver->selectable, fileserver->socket))
+	if(selected > 0 && selectable_set_can_read(&fileserver_state->selectable, fileserver_state->socket))
 	{
-		accept_incoming_connections(selected, fileserver->socket, &fileserver->connection_storage, 
-                                    &fileserver->statistics);
+		accept_incoming_connections(selected, fileserver_state->socket, &fileserver_state->connection_storage, 
+                                    &fileserver_state->statistics);
 	}
 
-    for(int i = 0; i < fileserver->connection_storage.count; ++i)
+    for(int i = 0; i < fileserver_state->connection_storage.count; ++i)
     {
-        connection* connection = (fileserver->connection_storage.connections + i);
+        connection* connection = (fileserver_state->connection_storage.connections + i);
         
         if(connection->transfer_in_progress)
         {
-            fileserver_write_downloaded_data(&fileserver->io, connection);
+            fileserver_write_downloaded_data(&fileserver_state->io, connection);
         }
     }
+
+    return 1;
 }
 
-fileserver
-fileserver_create()
+void*
+fileserver_create(char* command_line[], int command_line_count)
 {
-    fileserver fileserver;
-    memset(&fileserver, 0, sizeof(fileserver));
+    UNUSED(command_line);
+    UNUSED(command_line_count);
 
-    timer_initialize(&fileserver.timer);
+    fileserver* fileserver_state = (fileserver*)malloc(sizeof(fileserver));
+    memset(fileserver_state, 0, sizeof(fileserver));
 
-    fileserver.io = file_io_initialize();
+    fileserver_state->io = file_io_initialize();
 
-    fileserver.selectable          = selectable_set_create();
-    fileserver.connection_storage  = create_connection_storage(MAX_CONNECTION_COUNT);
+    fileserver_state->selectable          = selectable_set_create();
+    fileserver_state->connection_storage  = create_connection_storage(MAX_CONNECTION_COUNT);
 
-    fileserver.socket = socket_create_tcp();
-    socket_set_nonblocking(fileserver.socket);
+    fileserver_state->socket = socket_create_tcp();
+    socket_set_nonblocking(fileserver_state->socket);
 
-    fileserver.address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
-    socket_bind(fileserver.socket, fileserver.address);
+    fileserver_state->address = socket_create_inet_address("0.0.0.0", DEFAULT_LISTEN_PORT);
+    socket_bind(fileserver_state->socket, fileserver_state->address);
 
-    socket_address_to_string(&fileserver.address, fileserver.address_string, INET_STRADDR_LENGTH);
+    socket_address_to_string(&fileserver_state->address, fileserver_state->address_string, INET_STRADDR_LENGTH);
 
-    socket_listen(fileserver.socket);
+    socket_listen(fileserver_state->socket);
 
-    return fileserver;
+    return fileserver_state;
 }
 
 void
-fileserver_destroy(fileserver* fileserver)
+fileserver_destroy(void* state)
 {
-    file_io_destroy(&fileserver->io);
-    destroy_connection_storage(&fileserver->connection_storage);
-    socket_close(fileserver->socket);
+    fileserver* fileserver_state = (fileserver*)state;
+    if(fileserver_state != 0)
+    {
+        file_io_destroy(&fileserver_state->io);
+        destroy_connection_storage(&fileserver_state->connection_storage);
+        socket_close(fileserver_state->socket);
+        free(fileserver_state);
+    }
 }
 
 int 
 main(int argc, char* argv[]) 
 {
-    UNUSED(argc);
-    UNUSED(argv);
+    application application;
+    application.target_ups = TARGET_UPS;
+    application.create = fileserver_create;
+    application.destroy = fileserver_destroy;
+    application.tick = fileserver_tick;
+    application.print = print_server_info;
 
-    console_init();
-    socket_initialize();
-
-    measure_time measure;
-    measure_initialize(&measure);
-
-    fileserver fileserver = fileserver_create();
-
-    int running = 1;
-    while(running && !platform_quit)
-    {
-	    fileserver_tick(&fileserver);
-
-        wait_for_target_ups(&measure, 1.0 / TARGET_UPS);
-
-	    timer_end_frame(&fileserver.timer);
-    }
-
-    fileserver_destroy(&fileserver);
-
-    socket_cleanup();
+    application_run(&application, argc, argv);
 
     printf("Server terminated gracefully.\n");
 }
